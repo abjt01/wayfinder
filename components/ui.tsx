@@ -155,6 +155,32 @@ export function Meter({
   );
 }
 
+/**
+ * Thin progress track. The header, the milestone rail and the dashboard's
+ * hours bar each hand-rolled this same absolutely-positioned fill.
+ * Size it with `className`; the height and width belong to the caller.
+ */
+export function Bar({
+  pct,
+  tone = "ink",
+  className = "",
+}: {
+  pct: number;
+  tone?: "ink" | "moss";
+  className?: string;
+}) {
+  return (
+    <span className={`relative block bg-rule ${className}`}>
+      <span
+        className={`absolute inset-y-0 left-0 transition-all duration-500 ${
+          tone === "moss" ? "bg-moss" : "bg-ink"
+        }`}
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+      />
+    </span>
+  );
+}
+
 export function Stat({
   label,
   value,

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Kbd } from "./ui";
+import { Bar, Kbd } from "./ui";
 import { pathProgress } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
 
@@ -71,12 +71,7 @@ export function Header() {
               persisted state before it lands would mismatch on first paint. */}
           {hydrated && path && (
             <div className="hidden items-center gap-2 sm:flex" title="Path completion">
-              <span className="relative h-[4px] w-20 bg-rule">
-                <span
-                  className="absolute inset-y-0 left-0 bg-ink transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </span>
+              <Bar pct={pct} className="h-[4px] w-20" />
               <span className="t-meta">{pct}%</span>
             </div>
           )}

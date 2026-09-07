@@ -1,5 +1,6 @@
 "use client";
 
+import { Bar } from "./ui";
 import { useScrollSpy } from "@/lib/hooks";
 import { milestoneProgress } from "@/lib/progress";
 import type { LearningPath } from "@/lib/types";
@@ -36,14 +37,7 @@ export function MilestoneSpine({
                 {m.title}
               </span>
               <span className="mt-1 flex items-center gap-2">
-                <span className="relative h-[3px] flex-1 bg-rule">
-                  <span
-                    className={`absolute inset-y-0 left-0 transition-all duration-500 ${
-                      pct === 100 ? "bg-moss" : "bg-ink"
-                    }`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </span>
+                <Bar pct={pct} tone={pct === 100 ? "moss" : "ink"} className="h-[3px] flex-1" />
                 <span className="t-meta shrink-0">
                   {done}/{m.items.length}
                 </span>

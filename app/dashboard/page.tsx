@@ -6,6 +6,7 @@ import { KindTag } from "@/components/KindGlyph";
 import { HoursBar, ProgressRing } from "@/components/ProgressRing";
 import { SkillRadar } from "@/components/SkillRadar";
 import { useAssistant } from "@/components/AssistantHost";
+import { useToast } from "@/components/Toast";
 import { Button, Chip, Meter, Notice, PageEmpty, PageLoading, Panel, PanelHead, Stat } from "@/components/ui";
 import { usePost } from "@/lib/hooks";
 import { milestoneProgress, milestonesCleared, paceFor, pathProgress, weeksAt } from "@/lib/progress";
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const hydrated = useHydrated();
   const { profile, path, completed, toggleComplete } = useStore();
   const assistant = useAssistant();
+  const { push } = useToast();
   const { post, loading, error } = usePost<Coach>();
   const [coach, setCoach] = useState<Coach | null>(null);
   const [note, setNote] = useState("");
@@ -318,7 +320,10 @@ export default function DashboardPage() {
               <li key={item.id} className="px-5 py-3.5">
                 <div className="flex items-start gap-3">
                   <button
-                    onClick={() => toggleComplete(item.id)}
+                    onClick={() => {
+                      toggleComplete(item.id);
+                      push(`Marked "${item.title}" complete`, "moss");
+                    }}
                     aria-label={`Mark ${item.title} complete`}
                     className="mt-0.5 h-[18px] w-[18px] shrink-0 border border-ink-faint bg-card transition-colors hover:border-ink"
                   />

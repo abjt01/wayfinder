@@ -1,5 +1,6 @@
 "use client";
 
+import { Bar } from "./ui";
 import { useCountUp, useReducedMotion } from "@/lib/hooks";
 
 /** Arc gauge with a count-up centre. Two-tone: ink for done, rule for rest. */
@@ -68,12 +69,9 @@ export function ProgressRing({
 
 /** Compact hours bar used in dashboard rows. */
 export function HoursBar({ done, total }: { done: number; total: number }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
   return (
     <div className="flex items-center gap-2">
-      <div className="relative h-[6px] flex-1 bg-rule">
-        <div className="absolute inset-y-0 left-0 bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
-      </div>
+      <Bar pct={total ? (done / total) * 100 : 0} className="h-[6px] flex-1" />
       <span className="t-meta shrink-0">
         {done}/{total} h
       </span>

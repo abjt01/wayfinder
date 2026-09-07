@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducedMotion } from "@/lib/hooks";
+import { smoothPath } from "@/lib/svg";
 
 /**
  * Decorative self-drawing trail for the landing hero — the same visual
@@ -16,12 +17,7 @@ export function TrailArt() {
     { x: 392, y: 88, label: "" },
     { x: 484, y: 34, label: "goal" },
   ];
-  const d = stops.reduce((acc, p, i) => {
-    if (i === 0) return `M ${p.x} ${p.y}`;
-    const prev = stops[i - 1];
-    const mx = (prev.x + p.x) / 2;
-    return `${acc} C ${mx} ${prev.y}, ${mx} ${p.y}, ${p.x} ${p.y}`;
-  }, "");
+  const d = smoothPath(stops);
 
   return (
     <svg viewBox="0 0 508 130" className="w-full" aria-hidden>

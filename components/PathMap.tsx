@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { KindGlyph } from "./KindGlyph";
 import { useReducedMotion } from "@/lib/hooks";
+import { smoothPath } from "@/lib/svg";
 import type { LearningPath, PathItem } from "@/lib/types";
 
 const COL_W = 168;
@@ -61,20 +62,6 @@ export function PathMap({
 
     const w = PAD_X * 2 + Math.max(1, cols.length) * COL_W;
 
-    // Smooth cubic trail through every node.
-    const line = (list: Node[]) => {
-      if (list.length === 0) return "";
-      if (list.length === 1) return `M ${list[0].x} ${list[0].y}`;
-      let d = `M ${list[0].x} ${list[0].y}`;
-      for (let i = 1; i < list.length; i++) {
-        const p = list[i - 1];
-        const c = list[i];
-        const mx = (p.x + c.x) / 2;
-        d += ` C ${mx} ${p.y}, ${mx} ${c.y}, ${c.x} ${c.y}`;
-      }
-      return d;
-    };
-
     // Completed prefix: contiguous run of done nodes from the start.
     let lastDone = -1;
     for (let i = 0; i < ns.length; i++) {
@@ -87,8 +74,8 @@ export function PathMap({
     return {
       nodes: ns,
       width: w,
-      trail: line(ns),
-      doneTrail: prefix.length > 1 ? line(prefix) : "",
+      trail: smoothPath(ns),
+      doneTrail: prefix.length > 1 ? smoothPath(prefix) : "",
       columns: cols,
       nextNode: next,
     };
