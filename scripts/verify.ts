@@ -11,6 +11,7 @@
  * streaming works, adaptation changes the path.
  */
 import { COURSE_BY_ID } from "../lib/catalog";
+import { AUTH_COOLDOWN_MS, KeyRing, RATE_LIMIT_COOLDOWN_MS, parseKeys } from "../lib/keyring";
 import type { LearningPath, Profile } from "../lib/types";
 
 const BASE = process.env.VERIFY_BASE ?? "http://127.0.0.1:3000";
@@ -89,6 +90,12 @@ async function main() {
   const health = await fetch(`${BASE}/api/health`).then((r) => r.json());
   check("health responds", health.ok === true);
   check("engine is reported", health.engine === "groq" || health.engine === "local");
+  check(
+    "health reports key counts without leaking material",
+    typeof health.keys?.configured === "number" &&
+      typeof health.keys?.available === "number" &&
+      !JSON.stringify(health).includes("gsk_")
+  );
   console.log(`  ->   engine: ${health.engine} (${health.model}), catalog ${health.catalogSize}\n`);
 
   /* ---- validation / error handling ---- */
@@ -135,6 +142,58 @@ async function main() {
     (junk.data.path?.milestones?.length ?? 0) > 0 &&
       junk.data.path.milestones.flatMap((m) => m.items).every((i) => i.courseId && COURSE_BY_ID.has(i.courseId))
   );
+  console.log("");
+
+  /* ---- Groq key rotation ----
+     Pure logic, no network and no real key: the ring is driven directly with
+     an injected clock so cooldowns can be tested without waiting a minute. */
+  console.log("groq key rotation");
+  const K = (n: number) => `gsk_test_key_${n}_${"x".repeat(12)}`;
+
+  check("a comma separated list parses into keys", parseKeys(`${K(1)}, ${K(2)}`).length === 2);
+  check("blanks and duplicates are dropped", parseKeys(`${K(1)},, ${K(1)} , short`).length === 1);
+  check(
+    "both env vars merge into one ring",
+    parseKeys(`${K(1)},${K(2)}`, K(3)).length === 3
+  );
+
+  const ring = new KeyRing([K(1), K(2), K(3)]);
+  check("ring reports its size", ring.size === 3);
+
+  const t0 = 1_000_000;
+  const firstPass = [ring.next(t0), ring.next(t0), ring.next(t0)];
+  check("round-robins rather than reusing one key", new Set(firstPass).size === 3);
+  check("wraps back to the first key", ring.next(t0) === firstPass[0]);
+
+  ring.penalise(firstPass[0]!, "rate-limit", t0);
+  check("a rate limited key is skipped", !new Set([ring.next(t0), ring.next(t0)]).has(firstPass[0]!));
+  check("the other two stay available", ring.available(t0) === 2);
+
+  check(
+    "a rate limited key comes back after its cooldown",
+    ring.available(t0 + RATE_LIMIT_COOLDOWN_MS + 1) === 3
+  );
+
+  const authRing = new KeyRing([K(9)]);
+  authRing.penalise(K(9), "auth", t0);
+  check("a rejected key sits out longer than a busy one", AUTH_COOLDOWN_MS > RATE_LIMIT_COOLDOWN_MS);
+  check("a rejected key is unavailable", authRing.next(t0) === null);
+  check(
+    "a rejected key also recovers eventually",
+    authRing.next(t0 + AUTH_COOLDOWN_MS + 1) === K(9)
+  );
+
+  const honoured = new KeyRing([K(4)]);
+  honoured.penalise(K(4), "rate-limit", t0, 5); // Groq sent Retry-After: 5
+  check("Groq's own Retry-After is honoured", honoured.next(t0 + 4_000) === null && honoured.next(t0 + 6_000) === K(4));
+
+  const allCold = new KeyRing([K(5), K(6)]);
+  allCold.penalise(K(5), "rate-limit", t0);
+  allCold.penalise(K(6), "rate-limit", t0);
+  check("null once every key is cooling off", allCold.next(t0) === null);
+  check("and it says how long until one frees up", allCold.coolestIn(t0) > 0);
+
+  check("an empty ring is simply unusable", new KeyRing([]).next(t0) === null);
   console.log("");
 
   /* ---- rate limiting ---- */

@@ -34,6 +34,7 @@ and upgrades to a Groq-hosted model the moment you add a key. Nothing is a stub.
 - [API](#api)
 - [Project structure](#project-structure)
 - [Configuration](#configuration)
+- [Key rotation](#key-rotation)
 - [Rate limiting](#rate-limiting)
 - [Testing](#testing)
 - [Continuous integration](#continuous-integration)
@@ -188,9 +189,11 @@ lib/
   progress.ts     every "how far through the path" derivation
   profile.ts      coerces any incoming profile into a complete one
   rateLimit.ts    per-IP ceilings guarding the key and the server
+  keyring.ts      round-robin over several Groq keys, with cooldowns
   groq.ts         chatText · chatJSON · streamText
 scripts/
-  verify.ts       110 end-to-end assertions over the real HTTP API
+  verify.ts            127 end-to-end assertions over the real HTTP API
+  verify-rotation.ts   key rotation, against a stub Groq
 ```
 
 ---
@@ -199,9 +202,46 @@ scripts/
 
 | Variable | Required | Default | Effect |
 | --- | --- | --- | --- |
-| `GROQ_API_KEY` | no | — | Absent → deterministic local engine. Present → Groq. |
+| `GROQ_API_KEY` | no | — | A single key. Absent (and no pool) → deterministic local engine. |
+| `GROQ_API_KEYS` | no | — | A comma-separated pool. Merged with `GROQ_API_KEY`; see [key rotation](#key-rotation). |
 | `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Any Groq chat model. |
+| `GROQ_API_URL` | no | Groq's completions endpoint | Point at an OpenAI-compatible proxy, or a stub in tests. |
 | `BUILD_STANDALONE` | no | — | `1` emits `.next/standalone` for the Docker image. Set by the Dockerfile; leave unset everywhere else. |
+
+---
+
+## Key rotation
+
+Groq's limits are **per key**, so a single key is the ceiling: the moment it
+returns `429` the whole app drops to the local engine until the window resets.
+Set a pool instead and requests round-robin across it.
+
+```bash
+GROQ_API_KEYS=gsk_one,gsk_two,gsk_three
+```
+
+Both variables are merged into one pool, so `GROQ_API_KEY` on its own still
+works exactly as before. Whitespace is tolerated, duplicates are dropped.
+
+| Response from Groq | What happens |
+| --- | --- |
+| `429` rate limited | That key sits out its cooldown — Groq's own `Retry-After` when it sends one, otherwise 60s — and the request immediately retries on the next key. |
+| `401` / `403` rejected | Longer cooldown of 15 minutes, since a rejected key is usually wrong rather than busy. |
+| Timeout or network fault | **No rotation.** Not the key's fault, and re-running a 45s timeout against every key in turn would turn a brief outage into a long one. Falls through to the local engine. |
+| Every key cold | Falls through to the local engine, exactly as an unconfigured app does. Nobody sees an error. |
+
+`GET /api/health` reports `keys: { configured, available }` — counts only, never
+any key material. `available` drops as keys are rate limited and climbs back as
+their cooldowns expire, which makes the pool observable in production.
+
+```bash
+npm run verify:rotation
+```
+
+That stands up a stub Groq and its own app instance, then asserts the whole
+path: rotate past a rate-limited key, skip it while it is cooling off, and fall
+back to the local engine once every key is spent. No real key is needed, which
+is why it runs in CI.
 
 ---
 
@@ -226,7 +266,7 @@ behind `hit()` if you ever need an exact global limit.
 
 ```bash
 npm run dev        # in one shell
-npm run verify     # in another — 110 assertions over the real HTTP API
+npm run verify     # in another — 127 assertions over the real HTTP API
 ```
 
 `npm run verify` drives the actual HTTP surface rather than mocking it. It walks three
@@ -238,15 +278,17 @@ asserts the invariants that matter:
 - streaming alive, and adaptation actually changing the path
 - malformed and stale profiles coerced rather than crashing the route
 - rate limiting enforced, but loose enough that a real session never meets it
+- key rotation: round-robin, cooldowns, Groq's `Retry-After` honoured, recovery after the window
 - every page rendering, and a 404 that 404s
 
 Point it at any deployment with `VERIFY_BASE`. Requests carry a per-section caller
 address, randomised per run, so the suite never trips its own limiter.
 
 ```bash
-npm run lint         # eslint
-npm run typecheck    # tsc --noEmit
-npm run build        # production build
+npm run lint              # eslint
+npm run typecheck         # tsc --noEmit
+npm run build             # production build
+npm run verify:rotation   # key rotation, against a stub Groq
 ```
 
 ---
@@ -256,7 +298,7 @@ npm run build        # production build
 `.github/workflows/ci.yml` runs on every push and pull request to `main`, cancelling
 superseded runs:
 
-- **check** — install from the lockfile, lint, typecheck, build, boot the production server, run the full end-to-end suite against it. The build deliberately omits `BUILD_STANDALONE` so CI exercises the same output a managed host produces.
+- **check** — install from the lockfile, lint, typecheck, build, boot the production server, run the full end-to-end suite against it, then run the key-rotation integration check. The build deliberately omits `BUILD_STANDALONE` so CI exercises the same output a managed host produces.
 - **docker** — build the image, run it, wait for the healthcheck, then smoke test that it serves the app with no API key at all.
 
 Nothing is published: the image is built and exercised, not pushed. Deployment stays

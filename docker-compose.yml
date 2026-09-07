@@ -11,6 +11,9 @@ services:
       # Optional. Without a key the app runs on its deterministic local engine,
       # so the container is fully functional either way.
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Comma-separated pool; requests round-robin across it and a rate-limited
+      # key sits out its cooldown. Merged with GROQ_API_KEY above.
+      GROQ_API_KEYS: ${GROQ_API_KEYS:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
     restart: unless-stopped
     healthcheck:

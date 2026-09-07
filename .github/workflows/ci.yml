@@ -67,6 +67,11 @@ jobs:
         if: always()
         run: kill "$(cat server.pid)" || true
 
+      # Stands up its own stub Groq and its own app instance, so key rotation
+      # is exercised without a real key ever being needed in CI.
+      - name: Verify Groq key rotation
+        run: npm run verify:rotation
+
   docker:
     name: Image builds and serves
     runs-on: ubuntu-latest

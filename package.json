@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "verify": "tsx scripts/verify.ts",
+    "verify:rotation": "tsx scripts/verify-rotation.ts",
     "docker:build": "docker build -t wayfinder .",
     "docker:run": "docker run --rm -p 3000:3000 --env-file .env.local wayfinder",
     "docker:up": "docker compose up --build",

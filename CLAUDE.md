@@ -26,7 +26,8 @@ npm run dev          # http://localhost:3000
 npm run lint         # eslint . — 0 errors expected, warnings are documented
 npm run typecheck    # tsc --noEmit
 npm run build        # production build
-npm run verify       # 110 end-to-end assertions; needs a server on :3000 first
+npm run verify       # 127 end-to-end assertions; needs a server on :3000 first
+npm run verify:rotation  # key rotation; starts its own stub Groq and app
 ```
 
 `npm run verify` drives the real HTTP API, so start `npm run dev` (or
@@ -61,6 +62,9 @@ configuration — do not "simplify" it away.
   `pathProgress`, `milestoneProgress`, `weeksAt`, `paceFor`. **Use these
   rather than flattening milestones by hand**; that arithmetic was previously
   copied into nine places and had already drifted apart.
+- `lib/keyring.ts` — `KeyRing` + `parseKeys()`. Round-robin over several Groq
+  keys with per-key cooldowns. Deliberately free of `fetch` and `process.env`
+  so the rotation logic is testable without a real key.
 - `lib/rateLimit.ts` — per-IP fixed-window limiter. See below.
 - `lib/svg.ts` — `smoothPath()`, shared by the journey map and the landing
   trail so both curves are literally the same shape.
@@ -79,6 +83,19 @@ configuration — do not "simplify" it away.
   `ItemCard`, `MilestoneSpine`, `Toast`, `Shell`, `ui.tsx` primitives,
   `KindGlyph`, `TrailArt`. `ui.tsx` also holds the shared page states
   (`PageLoading`, `PageEmpty`) and the `Bar` progress track.
+
+## Key rotation
+
+Groq's limits are per key, so `lib/groq.ts` retries a call across a ring of them.
+Only **key-specific** statuses rotate — 429 parks a key for its `Retry-After` (or
+60s), 401/403 for 15 minutes. **Timeouts and network faults deliberately do not
+rotate**: re-running a 45s timeout against every key would turn a short outage
+into a long one, so those fall straight through to the local engine as before.
+When every key is cold the request degrades to the local engine, so a spent pool
+is never an error the learner sees.
+
+`/api/health` reports `keys: { configured, available }` — counts only, never key
+material. Keep it that way.
 
 ## Rate limiting
 
@@ -113,8 +130,9 @@ lint, typecheck, build, boot the server, run the suite) and a **docker** job
 no API key). Nothing is published; deployment stays with the host's git
 integration.
 
-Env vars: `GROQ_API_KEY` (optional), `GROQ_MODEL` (optional), `BUILD_STANDALONE`
-(Docker only).
+Env vars: `GROQ_API_KEY` and/or `GROQ_API_KEYS` (both optional, merged into one
+pool), `GROQ_MODEL` (optional), `GROQ_API_URL` (optional endpoint override),
+`BUILD_STANDALONE` (Docker only).
 
 ## Conventions
 
