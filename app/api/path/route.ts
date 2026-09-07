@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   // partial or stale one into a complete Profile rather than crashing on it.
   const learner = normalizeProfile(profile);
 
-  let source: "groq" | "local" = "local";
+  const source: "groq" | "local" = "local";
   let raw: RawPath | null = null;
 
   if (gate.useGroq) {

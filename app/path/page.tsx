@@ -85,8 +85,6 @@ export default function PathPage() {
     );
   }
 
-  let counter = 0;
-
   return (
     <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-8">
       {/* ---------- header ---------- */}
@@ -179,6 +177,9 @@ export default function PathPage() {
           )}
 
           {path.milestones.map((m, mi) => {
+            // Running position across the whole path, derived rather than
+            // accumulated in a variable mutated during render.
+            const offset = path.milestones.slice(0, mi).reduce((s, p) => s + p.items.length, 0);
             const done = m.items.filter((i) => completed.includes(i.id)).length;
             const complete = done === m.items.length;
             const hours = m.items.reduce((s, i) => s + i.hours, 0);
@@ -207,10 +208,9 @@ export default function PathPage() {
                   </div>
                 </div>
                 <ul>
-                  {m.items.map((item) => {
-                    counter += 1;
-                    return <ItemCard key={item.id} item={item} index={counter} />;
-                  })}
+                  {m.items.map((item, ii) => (
+                    <ItemCard key={item.id} item={item} index={offset + ii + 1} />
+                  ))}
                 </ul>
               </Panel>
             );

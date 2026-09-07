@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { KindGlyph, KindTag } from "@/components/KindGlyph";
 import { useAssistant } from "@/components/AssistantHost";
-import { Button, Chip, Panel, PanelHead, Stat } from "@/components/ui";
+import { Button, Chip, Panel, Stat } from "@/components/ui";
 import { CATALOG, COURSE_BY_ID } from "@/lib/catalog";
 import { useHydrated, useStore } from "@/lib/store";
 import type { Course, Level } from "@/lib/types";

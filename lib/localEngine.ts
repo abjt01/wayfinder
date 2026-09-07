@@ -303,7 +303,10 @@ function whyFor(course: Course, profile: Profile, unlocks: Course[]): string {
 export function localPath(
   profile: Profile,
   feedback?: string,
-  current?: LearningPath | null
+  // Kept for signature parity with the Groq path, which does condition on the
+  // existing path. The local engine rebuilds from the profile and the feedback
+  // text alone, so it never reads this.
+  _current?: LearningPath | null
 ): RawPath {
   const fb = (feedback ?? "").toLowerCase();
   const wantsShorter = /(short|trim|cut|too long|faster|less|essential|minimal)/.test(fb);
@@ -405,7 +408,6 @@ export function localPath(
       outcome: outcomeFor(items),
       items: items.map((c) => {
         const unlocks = finalOrder.filter((o) => o.prereqs.includes(c.id));
-        const metPrereqs = c.prereqs.map((p) => COURSE_BY_ID.get(p)?.title ?? p);
         const inPath = c.prereqs.filter((p) => chosenIds.has(p));
         return {
           courseId: c.id,

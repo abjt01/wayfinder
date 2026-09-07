@@ -131,7 +131,11 @@ type Combo = {
 
 export function useHotkeys(combos: Combo[]) {
   const ref = useRef(combos);
-  ref.current = combos;
+  // Written in an effect, not during render, so the listener below can stay
+  // mounted once while always seeing the latest handlers.
+  useEffect(() => {
+    ref.current = combos;
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
