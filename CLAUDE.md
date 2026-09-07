@@ -57,7 +57,13 @@ configuration — do not "simplify" it away.
   incoming profile through this.** Profiles arrive from localStorage and may
   predate the current shape; the engines index straight into `knownSkills` and
   `completedCourses`, so a missing array used to be a 500.
+- `lib/progress.ts` — every "how far through the path" derivation:
+  `pathProgress`, `milestoneProgress`, `weeksAt`, `paceFor`. **Use these
+  rather than flattening milestones by hand**; that arithmetic was previously
+  copied into nine places and had already drifted apart.
 - `lib/rateLimit.ts` — per-IP fixed-window limiter. See below.
+- `lib/svg.ts` — `smoothPath()`, shared by the journey map and the landing
+  trail so both curves are literally the same shape.
 - `lib/groq.ts` — `chatText` / `chatJSON` / `streamText`, 45s AbortController
   timeout, `hasKey()`.
 - `lib/hooks.ts` — `useReveal`, `useCountUp`, `useScrollSpy`, `useHotkeys`,
@@ -71,7 +77,8 @@ configuration — do not "simplify" it away.
 - Components: `PathMap` (SVG journey graph), `SkillRadar`, `ProgressRing`,
   `CommandPalette` (⌘K), `AssistantHost` (drawer and context provider),
   `ItemCard`, `MilestoneSpine`, `Toast`, `Shell`, `ui.tsx` primitives,
-  `KindGlyph`, `TrailArt`.
+  `KindGlyph`, `TrailArt`. `ui.tsx` also holds the shared page states
+  (`PageLoading`, `PageEmpty`) and the `Bar` progress track.
 
 ## Rate limiting
 
@@ -123,6 +130,12 @@ Env vars: `GROQ_API_KEY` (optional), `GROQ_MODEL` (optional), `BUILD_STANDALONE`
 - Anything added to `CATALOG` needs prerequisite ids that exist and skills drawn
   from the existing vocabulary, which is what the local engine's skill matcher is
   built from.
+- Shared shapes live in `lib/types.ts`: `Level`/`LEVELS`/`LEVEL_RANK`,
+  `SkillGap`, `Coaching`. Derive from them rather than restating them — the
+  coach's shape had drifted into three separate declarations.
+- Resource kinds are labelled through `KIND_LABEL` / `kindCount` in
+  `KindGlyph.tsx`. Never render the raw `kind` enum: the reader sees
+  "Checkpoint", not "assessment".
 
 ## Gotchas
 
