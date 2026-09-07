@@ -302,7 +302,7 @@ export default function StartPage() {
                   <Spinner label="Ordering prerequisites and cutting to your time budget" />
                 ) : (
                   <p className="text-[12.5px] text-ink-mute">
-                    Looks right? Generate it. Anything read wrong is editable below.
+
                   </p>
                 )}
               </div>
