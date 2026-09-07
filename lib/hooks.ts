@@ -14,16 +14,37 @@ export function useReducedMotion() {
   return reduced;
 }
 
-/** Adds `is-in` once the element scrolls into view. Pair with `.reveal`. */
-export function useReveal<T extends HTMLElement = HTMLDivElement>() {
-  const ref = useRef<T | null>(null);
-  useEffect(() => {
-    const el = ref.current;
+/**
+ * Adds `is-in` once the element scrolls into view. Pair with `.reveal`.
+ *
+ * This is a **callback ref**, not an object ref, on purpose: the elements that
+ * use it are conditionally rendered (they appear only after a profile exists),
+ * so an effect keyed on `[]` would run while the ref is still null and the
+ * observer would never attach — leaving `.reveal`'s `opacity: 0` permanent and
+ * the content invisible. A callback ref fires whenever the node appears.
+ *
+ * A timer also force-reveals the node shortly after it mounts, so a missed or
+ * never-firing IntersectionObserver can never hide content for good.
+ */
+const REVEAL_FAILSAFE_MS = 1200;
+
+export function useReveal<T extends HTMLElement = HTMLElement>() {
+  const cleanup = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => cleanup.current?.(), []);
+
+  return useCallback((el: T | null) => {
+    cleanup.current?.();
+    cleanup.current = null;
     if (!el) return;
+
+    const show = () => el.classList.add("is-in");
+
     if (typeof IntersectionObserver === "undefined") {
-      el.classList.add("is-in");
+      show();
       return;
     }
+
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -36,9 +57,15 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>() {
       { rootMargin: "0px 0px -12% 0px", threshold: 0.08 }
     );
     io.observe(el);
-    return () => io.disconnect();
+
+    // Failsafe: content must never stay invisible because an observer misfired.
+    const timer = setTimeout(show, REVEAL_FAILSAFE_MS);
+
+    cleanup.current = () => {
+      clearTimeout(timer);
+      io.disconnect();
+    };
   }, []);
-  return ref;
 }
 
 /** Eases a number up to `value` whenever it changes. */
@@ -93,7 +120,14 @@ export function useScrollSpy(ids: string[], offset = 140) {
   return active;
 }
 
-type Combo = { key: string; meta?: boolean; shift?: boolean; run: () => void };
+type Combo = {
+  key: string;
+  meta?: boolean;
+  shift?: boolean;
+  /** Fire even while a text field has focus — for dismiss keys like Escape. */
+  allowInInput?: boolean;
+  run: () => void;
+};
 
 export function useHotkeys(combos: Combo[]) {
   const ref = useRef(combos);
@@ -108,7 +142,7 @@ export function useHotkeys(combos: Combo[]) {
         const metaOk = c.meta ? e.metaKey || e.ctrlKey : !e.metaKey && !e.ctrlKey;
         const shiftOk = c.shift ? e.shiftKey : true;
         if (e.key.toLowerCase() === c.key.toLowerCase() && metaOk && shiftOk) {
-          if (typing && !c.meta) continue;
+          if (typing && !c.meta && !c.allowInInput) continue;
           e.preventDefault();
           c.run();
           return;
