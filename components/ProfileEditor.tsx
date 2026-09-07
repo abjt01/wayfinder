@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Button, Chip, Field, inputCls, Panel, PanelHead } from "./ui";
-import type { Level, Profile } from "@/lib/types";
-
-const LEVELS: Level[] = ["beginner", "intermediate", "advanced"];
+import { LEVELS } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 
 const toText = (v: string[]) => v.join(", ");
 const toList = (v: string) =>

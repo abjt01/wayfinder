@@ -1,4 +1,5 @@
 import { COURSE_BY_ID } from "./catalog";
+import { clampNumber } from "./profile";
 import type { LearningPath, Milestone, PathItem, Profile } from "./types";
 
 type RawItem = { courseId?: string; title?: string; why?: string; prereqNote?: string };
@@ -9,12 +10,6 @@ export type RawPath = {
   skillGaps?: { skill?: string; current?: unknown; target?: unknown; note?: string }[];
   milestones?: RawMilestone[];
 };
-
-function pct(v: unknown, fallback: number) {
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(100, Math.max(0, Math.round(n)));
-}
 
 /**
  * Turn the model's JSON into a validated path: every item must resolve to a
@@ -64,8 +59,8 @@ export function buildPath(raw: RawPath, profile: Profile): LearningPath {
     .slice(0, 10)
     .map((g) => ({
       skill: g.skill!.trim(),
-      current: pct(g.current, 20),
-      target: pct(g.target, 80),
+      current: clampNumber(g.current, 20, 0, 100),
+      target: clampNumber(g.target, 80, 0, 100),
       note: (g.note || "").trim(),
     }));
 

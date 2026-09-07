@@ -6,10 +6,10 @@ import { useAssistant } from "@/components/AssistantHost";
 import { Button, Chip, Panel, Stat } from "@/components/ui";
 import { CATALOG, COURSE_BY_ID } from "@/lib/catalog";
 import { useHydrated, useStore } from "@/lib/store";
+import { LEVELS } from "@/lib/types";
 import type { Course, Level } from "@/lib/types";
 
 const KINDS: Course["kind"][] = ["course", "project", "assessment", "reading"];
-const LEVELS: Level[] = ["beginner", "intermediate", "advanced"];
 const DOMAINS = Array.from(new Set(CATALOG.map((c) => c.domain))).sort();
 
 export default function ExplorePage() {

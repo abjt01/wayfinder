@@ -10,7 +10,8 @@
 import { CATALOG, COURSE_BY_ID, retrieveCourses } from "./catalog";
 import type { RawPath } from "./buildPath";
 import { pathItems, pathProgress, paceFor, weeksAt } from "./progress";
-import type { Course, LearningPath, Level, Profile } from "./types";
+import { LEVEL_RANK } from "./types";
+import type { Coaching, Course, LearningPath, Level, Profile } from "./types";
 
 /* ------------------------------------------------------------------ */
 /* profiling                                                           */
@@ -179,8 +180,6 @@ export function localProfile(message: string): Profile & { followUp: string } {
 /* ------------------------------------------------------------------ */
 /* path building                                                       */
 /* ------------------------------------------------------------------ */
-
-const LEVEL_RANK: Record<Level, number> = { beginner: 0, intermediate: 1, advanced: 2 };
 
 function knowsSkill(profile: Profile, skill: string) {
   const owned = profile.knownSkills.map((s) => s.toLowerCase());
@@ -587,7 +586,7 @@ export function localCoach(
   profile: Profile,
   path: LearningPath,
   completedIds: string[]
-): { status: string; observations: string[]; nextActions: { title: string; detail: string; effort: string }[]; pathChange: string } {
+): Coaching {
   const { items, remaining, doneHours, remainingHours, pct } = pathProgress(path, completedIds);
   const weeksNeeded = weeksAt(remainingHours, profile.weeklyHours);
   const next = remaining.slice(0, 2);

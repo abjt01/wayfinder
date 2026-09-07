@@ -1,3 +1,4 @@
+import { LEVELS } from "./types";
 import type { Level, Profile } from "./types";
 
 /**
@@ -9,8 +10,6 @@ import type { Level, Profile } from "./types";
  * `interests`, so a profile missing any of them crashed the route with a 500.
  * Every field is filled here instead, and every route coerces on the way in.
  */
-
-export const LEVELS: Level[] = ["beginner", "intermediate", "advanced"];
 
 export function clampNumber(v: unknown, fallback: number, min: number, max: number) {
   const n = typeof v === "number" ? v : Number(v);

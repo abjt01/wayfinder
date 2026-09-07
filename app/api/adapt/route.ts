@@ -6,15 +6,13 @@ import { profileBlock } from "@/lib/prompts";
 import { hasGoal, normalizeProfile } from "@/lib/profile";
 import { pathProgress } from "@/lib/progress";
 import { pathDigest } from "@/lib/buildPath";
-import type { LearningPath, Profile } from "@/lib/types";
+import type { CoachAction, Coaching, LearningPath, Profile } from "@/lib/types";
 
 export const maxDuration = 60;
 
-type Advice = {
-  status?: string;
-  observations?: string[];
-  nextActions?: { title?: string; detail?: string; effort?: string }[];
-  pathChange?: string;
+/** The model's raw answer: same shape as Coaching, nothing guaranteed. */
+type Advice = Partial<Omit<Coaching, "nextActions">> & {
+  nextActions?: Partial<CoachAction>[];
 };
 
 export async function POST(req: Request) {

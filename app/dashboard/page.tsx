@@ -10,14 +10,9 @@ import { Button, Chip, Empty, Meter, Notice, Panel, PanelHead, Spinner, Stat } f
 import { usePost } from "@/lib/hooks";
 import { milestoneProgress, milestonesCleared, paceFor, pathProgress, weeksAt } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
+import type { Coaching } from "@/lib/types";
 
-type Coach = {
-  status: string;
-  observations: string[];
-  nextActions: { title: string; detail: string; effort: string }[];
-  pathChange: string;
-  source?: string;
-};
+type Coach = Coaching & { source?: string };
 
 export default function DashboardPage() {
   const hydrated = useHydrated();

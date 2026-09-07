@@ -1,4 +1,5 @@
-import type { Course } from "./types";
+import { LEVEL_RANK } from "./types";
+import type { Course, Level } from "./types";
 
 /**
  * Local course catalog. Stands in for a real platform's course DB — the
@@ -66,8 +67,6 @@ export const CATALOG: Course[] = [
 
 export const COURSE_BY_ID = new Map(CATALOG.map((c) => [c.id, c]));
 
-const LEVEL_RANK: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 };
-
 function tokens(s: string) {
   return s
     .toLowerCase()
@@ -98,7 +97,7 @@ export function retrieveCourses(
     let score = 0;
     for (const t of q) if (hay.has(t)) score += 3;
     for (const s of c.skills) if (q.has(s.split(" ")[0])) score += 2;
-    const gap = LEVEL_RANK[c.level] - (LEVEL_RANK[level] ?? 0);
+    const gap = LEVEL_RANK[c.level] - (LEVEL_RANK[level as Level] ?? 0);
     score += gap === 0 ? 2 : gap === 1 ? 1 : gap < 0 ? 0.5 : -1;
     if (c.kind === "project") score += 1;
     return { c, score };

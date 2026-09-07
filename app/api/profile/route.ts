@@ -3,7 +3,7 @@ import { chatJSON } from "@/lib/groq";
 import { degradedInit, guardRequest } from "@/lib/rateLimit";
 import { localProfile } from "@/lib/localEngine";
 import { PROFILE_SYSTEM } from "@/lib/prompts";
-import { normalizeProfile } from "@/lib/profile";
+import { normalizeProfile, strArray } from "@/lib/profile";
 import type { Profile } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -56,11 +56,11 @@ export async function POST(req: Request) {
   const merged: Profile = previous
     ? {
         ...local,
-        knownSkills: Array.from(new Set([...(previous.knownSkills ?? []), ...local.knownSkills])).slice(0, 12),
-        completedCourses: Array.from(
-          new Set([...(previous.completedCourses ?? []), ...local.completedCourses])
-        ).slice(0, 12),
-        interests: Array.from(new Set([...(previous.interests ?? []), ...local.interests])).slice(0, 8),
+        // strArray dedupes, trims and caps — the same job these three did by
+        // hand, in three slightly different ways.
+        knownSkills: strArray([...(previous.knownSkills ?? []), ...local.knownSkills]),
+        completedCourses: strArray([...(previous.completedCourses ?? []), ...local.completedCourses]),
+        interests: strArray([...(previous.interests ?? []), ...local.interests], 8),
       }
     : local;
 

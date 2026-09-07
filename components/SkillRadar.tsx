@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useReducedMotion } from "@/lib/hooks";
+import type { SkillGap } from "@/lib/types";
 
-type Axis = { skill: string; current: number; target: number; note?: string };
+/** A skill gap as the radar needs it; the dashboard plots rows with no note. */
+type Axis = Pick<SkillGap, "skill" | "current" | "target"> & { note?: string };
 
 const SIZE = 260;
 const C = SIZE / 2;
