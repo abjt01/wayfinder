@@ -14,5 +14,8 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 README.md
+CLAUDE.md
+AGENTS.md
+.github
 scripts
 .DS_Store

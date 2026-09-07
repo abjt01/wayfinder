@@ -7,6 +7,3 @@ out
 *.tsbuildinfo
 next-env.d.ts
 .claude/
-
-# Next 16 regenerates this on every build; project context lives in .claude/
-CLAUDE.md
