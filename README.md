@@ -45,19 +45,31 @@ docker run --rm -p 3000:3000 --env-file .env.local wayfinder
 
 The image is a three-stage build (`deps` → `builder` → `runner`) on `node:22-alpine`, shipping only the Next.js standalone output, running as a non-root user, with a `HEALTHCHECK` against `/api/health`.
 
+Standalone output is opt-in, via `BUILD_STANDALONE=1`, which the Dockerfile's builder stage sets. Managed hosts package the app themselves and the extra output trips their build, so every non-Docker build — local, CI, Vercel — gets the default output instead. One config serves both targets.
+
 ### Verify it works
 
 ```bash
 npm run dev        # in one shell
-npm run verify     # in another — 102 assertions over the real HTTP API
+npm run verify     # in another — 110 assertions over the real HTTP API
 ```
 
-`npm run verify` walks three personas end to end (profile → path → explain → chat → coach → adapt) and asserts the invariants that actually matter: prerequisites ordered, no invented courses, no duplicates, budgets respected, streaming alive, pages rendering.
+`npm run verify` walks three personas end to end (profile → path → explain → chat → coach → adapt) and asserts the invariants that actually matter: prerequisites ordered, no invented courses, no duplicates, budgets respected, streaming alive, malformed profiles coerced rather than crashing, rate limiting enforced without being tight enough to hit a real session, pages rendering. Point it anywhere with `VERIFY_BASE`.
 
 ```
+npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
 npm run build        # production build
 ```
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+
+- **check** — install, lint, typecheck, build, boot the production server, run the full end-to-end suite against it.
+- **docker** — build the image, run it, wait for the healthcheck, and smoke test that it serves the app with no API key set.
+
+Nothing is published. The image is built and exercised, not pushed; deployment stays with the host's git integration.
 
 ### Environment
 
@@ -65,6 +77,16 @@ npm run build        # production build
 | --- | --- | --- | --- |
 | `GROQ_API_KEY` | no | — | Absent → deterministic local engine. Present → Groq. |
 | `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Any Groq chat model. |
+| `BUILD_STANDALONE` | no | — | `1` emits `.next/standalone` for the Docker image. Set by the Dockerfile; leave unset everywhere else. |
+
+### Rate limiting
+
+Two per-IP ceilings, in `lib/rateLimit.ts`, protecting different things:
+
+- **30 Groq-backed requests a minute** guards the API key. Crossing it does not fail anything — the request falls through to the local engine, exactly as it does for a missing key or a Groq outage, and the response carries `X-Engine-Degraded: rate-limit`. One bucket covers all routes, so the ceiling is on what a caller costs in total rather than per endpoint.
+- **120 requests a minute** guards the server and is the only one that returns `429`, with `Retry-After`. `/api/health` is exempt so the container healthcheck never consumes allowance.
+
+Counters live in process memory, so behind N replicas the effective ceiling is N times these numbers. Put a shared store behind `hit()` if you ever need an exact global limit.
 
 ---
 
