@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { TrailArt } from "@/components/TrailArt";
 import { useToast } from "@/components/Toast";
-import { Button, Chip, Notice, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
+import { Button, Chip, Notice, PageLoading, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
 import { usePost, useReveal } from "@/lib/hooks";
 import { useHydrated, useStore } from "@/lib/store";
 import type { LearningPath, Profile } from "@/lib/types";
@@ -86,9 +86,7 @@ export default function StartPage() {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-20">
-        <Spinner label="Loading your workspace" />
-      </div>
+      <PageLoading label="Loading your workspace" />
     );
   }
 

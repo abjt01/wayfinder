@@ -182,14 +182,6 @@ export function useScrollLock(active: boolean) {
   }, [active]);
 }
 
-export function useIsMac() {
-  const [mac, setMac] = useState(true);
-  useEffect(() => {
-    setMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent));
-  }, []);
-  return mac;
-}
-
 /** Fetch helper with abort + typed error, shared by every client call. */
 export function usePost<T>() {
   const [loading, setLoading] = useState(false);

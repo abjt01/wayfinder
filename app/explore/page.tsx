@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KindGlyph, KindTag } from "@/components/KindGlyph";
+import { KIND_LABEL, KindGlyph, KindTag } from "@/components/KindGlyph";
 import { useAssistant } from "@/components/AssistantHost";
 import { Button, Chip, Panel, Stat } from "@/components/ui";
 import { CATALOG, COURSE_BY_ID } from "@/lib/catalog";
@@ -100,7 +100,7 @@ export default function ExplorePage() {
           {KINDS.map((k) => (
             <span key={k} className="shrink-0">
               <Chip active={kind === k} onClick={() => setKind(kind === k ? null : k)}>
-                {k}
+                {KIND_LABEL[k]}
               </Chip>
             </span>
           ))}

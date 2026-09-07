@@ -76,3 +76,8 @@ export function KindTag({ kind }: { kind: Course["kind"] }) {
 }
 
 export { LABEL as KIND_LABEL };
+
+/** "3 Checkpoints" — the reader-facing label, pluralised. */
+export function kindCount(kind: Course["kind"], n: number) {
+  return `${n} ${LABEL[kind]}${n === 1 ? "" : "s"}`;
+}

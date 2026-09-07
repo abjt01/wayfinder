@@ -6,7 +6,7 @@ import { KindTag } from "@/components/KindGlyph";
 import { HoursBar, ProgressRing } from "@/components/ProgressRing";
 import { SkillRadar } from "@/components/SkillRadar";
 import { useAssistant } from "@/components/AssistantHost";
-import { Button, Chip, Empty, Meter, Notice, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
+import { Button, Chip, Meter, Notice, PageEmpty, PageLoading, Panel, PanelHead, Stat } from "@/components/ui";
 import { usePost } from "@/lib/hooks";
 import { milestoneProgress, milestonesCleared, paceFor, pathProgress, weeksAt } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
@@ -71,25 +71,21 @@ export default function DashboardPage() {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-20">
-        <Spinner label="Loading your dashboard" />
-      </div>
+      <PageLoading label="Loading your dashboard" />
     );
   }
 
   if (!path || !profile || !stats) {
     return (
-      <div className="mx-auto max-w-2xl px-4 sm:px-5 py-20">
-        <Empty
-          title="Nothing to track yet"
-          body="Generate a learning path and your progress, skill development and milestones show up here."
-          action={
-            <Link href="/">
-              <Button>Describe my goal</Button>
-            </Link>
-          }
-        />
-      </div>
+      <PageEmpty
+        title="Nothing to track yet"
+        body="Generate a learning path and your progress, skill development and milestones show up here."
+        action={
+          <Link href="/">
+            <Button>Describe my goal</Button>
+          </Link>
+        }
+      />
     );
   }
 

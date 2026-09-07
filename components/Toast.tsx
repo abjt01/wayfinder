@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-type Toast = { id: number; text: string; tone: "ink" | "rust" | "moss" };
+type Toast = { id: number; text: string; tone: "ink" | "moss" };
 type Ctx = { push: (text: string, tone?: Toast["tone"]) => void };
 
 const ToastCtx = createContext<Ctx>({ push: () => {} });
@@ -28,11 +28,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={`anim-sheet pointer-events-auto max-w-[86vw] border px-3.5 py-2 text-[13px] shadow-[0_10px_30px_-18px_rgba(26,26,23,0.5)] ${
-              t.tone === "rust"
-                ? "border-rust/40 bg-rust-soft text-ink"
-                : t.tone === "moss"
-                  ? "border-moss/35 bg-moss-soft text-ink"
-                  : "border-ink bg-ink text-paper"
+              t.tone === "moss" ? "border-moss/35 bg-moss-soft text-ink" : "border-ink bg-ink text-paper"
             }`}
           >
             {t.text}

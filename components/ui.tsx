@@ -12,7 +12,7 @@ export function Panel({
 }: {
   children: ReactNode;
   className?: string;
-  as?: "section" | "div" | "aside" | "li";
+  as?: "section" | "div";
 }) {
   return <Tag className={`border border-rule bg-card ${className}`}>{children}</Tag>;
 }
@@ -45,7 +45,7 @@ export function PanelHead({
 /* ---------------- controls ---------------- */
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "solid" | "outline" | "quiet" | "accent";
+  variant?: "solid" | "outline" | "quiet";
   size?: "sm" | "md";
   children: ReactNode;
 };
@@ -62,7 +62,6 @@ export function Button({
   const sizes = { sm: "px-2.5 py-1 text-[12.5px]", md: "px-3.5 py-2 text-[13.5px]" }[size];
   const variants = {
     solid: "bg-ink text-paper hover:bg-ink-soft disabled:bg-ink-faint",
-    accent: "bg-rust text-white hover:brightness-110 disabled:bg-ink-faint",
     outline:
       "border border-ink text-ink hover:bg-ink hover:text-paper disabled:border-rule disabled:text-ink-faint disabled:hover:bg-transparent disabled:hover:text-ink-faint",
     quiet:
@@ -130,31 +129,25 @@ export const inputCls =
 /** Segmented meter — reads as a printed scale, not a progress pill. */
 export function Meter({
   value,
-  target,
   segments = 24,
   tone = "ink",
 }: {
   value: number;
-  target?: number;
   segments?: number;
   tone?: "ink" | "moss" | "rust";
 }) {
   const animated = useCountUp(value, 800);
   const filled = Math.round((Math.min(100, Math.max(0, animated)) / 100) * segments);
-  const targetSeg = typeof target === "number" ? Math.round((target / 100) * segments) : -1;
   const fill = { ink: "bg-ink", moss: "bg-moss", rust: "bg-rust" }[tone];
   return (
     <div className="flex items-end gap-[2px]" aria-hidden>
       {Array.from({ length: segments }, (_, i) => {
         const on = i < filled;
-        const isTarget = i === targetSeg - 1;
         return (
           <span
             key={i}
-            className={`w-full transition-colors duration-300 ${
-              on ? fill : isTarget ? "bg-rust/50" : "bg-rule"
-            }`}
-            style={{ height: on ? 12 : isTarget ? 12 : 7 }}
+            className={`w-full transition-colors duration-300 ${on ? fill : "bg-rule"}`}
+            style={{ height: on ? 12 : 7 }}
           />
         );
       })}
@@ -209,31 +202,14 @@ export function Spinner({ label }: { label?: string }) {
   );
 }
 
-export function Notice({
-  children,
-  tone = "rust",
-  onDismiss,
-}: {
-  children: ReactNode;
-  tone?: "rust" | "ink";
-  onDismiss?: () => void;
-}) {
+export function Notice({ children }: { children: ReactNode }) {
   return (
-    <div
-      className={`flex items-start gap-3 border px-3.5 py-2.5 text-[13px] ${
-        tone === "rust" ? "border-rust/35 bg-rust-soft text-ink" : "border-rule bg-card text-ink-soft"
-      }`}
-    >
+    <div className="flex items-start gap-3 border border-rust/35 bg-rust-soft px-3.5 py-2.5 text-[13px] text-ink">
       <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rust">
         <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.4" />
         <path d="M8 4.6v4.2M8 11.2v.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
       <div className="min-w-0 flex-1">{children}</div>
-      {onDismiss && (
-        <button onClick={onDismiss} className="t-meta shrink-0 hover:text-ink" aria-label="Dismiss">
-          close
-        </button>
-      )}
     </div>
   );
 }
@@ -264,6 +240,37 @@ export function Empty({
       <p className="mx-auto mt-2 max-w-md text-[13.5px] text-ink-mute">{body}</p>
       {action && <div className="mt-6 flex justify-center">{action}</div>}
     </Panel>
+  );
+}
+
+/* ---------------- page states ---------------- */
+
+/* The same two wrappers were written out in four page files apiece, differing
+   only in their copy. */
+
+/** Full-page spinner, shown while localStorage hydrates. */
+export function PageLoading({ label }: { label: string }) {
+  return (
+    <div className="mx-auto max-w-[1180px] px-4 py-20 sm:px-5">
+      <Spinner label={label} />
+    </div>
+  );
+}
+
+/** Full-page empty or error state. */
+export function PageEmpty({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-20 sm:px-5">
+      <Empty title={title} body={body} action={action} />
+    </div>
   );
 }
 

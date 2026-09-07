@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ItemCard } from "@/components/ItemCard";
+import { kindCount } from "@/components/KindGlyph";
 import { MilestoneSpine } from "@/components/MilestoneSpine";
 import { PathMap } from "@/components/PathMap";
 import { SkillRadar } from "@/components/SkillRadar";
 import { useToast } from "@/components/Toast";
-import { Button, Chip, Empty, Notice, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
+import { Button, Chip, Notice, PageEmpty, PageLoading, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
 import { usePost } from "@/lib/hooks";
 import { milestoneProgress, pathProgress, sumHours, weeksAt } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
-import type { LearningPath } from "@/lib/types";
+import type { Course, LearningPath } from "@/lib/types";
 
 const FEEDBACK_PRESETS = [
   "Too long — cut it to the essentials.",
@@ -61,25 +62,21 @@ export default function PathPage() {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-20">
-        <Spinner label="Loading your path" />
-      </div>
+      <PageLoading label="Loading your path" />
     );
   }
 
   if (!path || !profile || !stats) {
     return (
-      <div className="mx-auto max-w-2xl px-4 sm:px-5 py-20">
-        <Empty
-          title="No learning path yet"
-          body="Describe your goal on the start page and Wayfinder will sequence one for you."
-          action={
-            <Link href="/">
-              <Button>Describe my goal</Button>
-            </Link>
-          }
-        />
-      </div>
+      <PageEmpty
+        title="No learning path yet"
+        body="Describe your goal on the start page and Wayfinder will sequence one for you."
+        action={
+          <Link href="/">
+            <Button>Describe my goal</Button>
+          </Link>
+        }
+      />
     );
   }
 
@@ -102,8 +99,7 @@ export default function PathPage() {
         <div className="mt-5 flex flex-wrap items-center gap-1.5">
           {Object.entries(stats.kinds).map(([kind, n]) => (
             <Chip key={kind} tone={kind === "project" ? "rust" : kind === "assessment" ? "ochre" : "neutral"}>
-              {n} {kind}
-              {n > 1 ? "s" : ""}
+              {kindCount(kind as Course["kind"], n)}
             </Chip>
           ))}
           <Link href="/dashboard" className="link-ink ml-auto text-[13px] text-ink-mute">

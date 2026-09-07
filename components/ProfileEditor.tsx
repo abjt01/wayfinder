@@ -32,8 +32,6 @@ export function ProfileEditor({
     setDirty(true);
   };
 
-  const fitWeeks = Math.ceil((draft.weeklyHours * draft.targetWeeks) / Math.max(1, draft.weeklyHours));
-
   return (
     <Panel>
       <PanelHead
@@ -96,7 +94,7 @@ export function ProfileEditor({
           </div>
         </Field>
 
-        <Field label="TARGET WEEKS" hint={`about ${Math.round(fitWeeks / 4.35)} month(s)`}>
+        <Field label="TARGET WEEKS" hint={`about ${Math.round(draft.targetWeeks / 4.35)} month(s)`}>
           <div className="mt-1 flex items-center gap-3">
             <input
               type="range"

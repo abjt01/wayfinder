@@ -99,10 +99,7 @@ body {
   color: var(--color-ink-faint);
 }
 
-/* Hairline rules that read as print, plus an ink underline for links */
-.rule-t {
-  border-top: 1px solid var(--color-rule);
-}
+/* Ink underline for links, so they read as print rather than as chrome */
 .link-ink {
   text-decoration: underline;
   text-decoration-thickness: 1px;
