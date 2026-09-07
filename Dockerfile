@@ -13,7 +13,10 @@ RUN npm ci
 ###############################################################################
 FROM node:22-alpine AS builder
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+# Turns on next.config.mjs's standalone output, which the runner stage copies.
+# Builds outside Docker leave it unset so managed hosts package normally.
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    BUILD_STANDALONE=1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
