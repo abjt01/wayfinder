@@ -15,6 +15,7 @@ Dockerfile
 docker-compose.yml
 README.md
 CLAUDE.md
+docs
 AGENTS.md
 .github
 scripts

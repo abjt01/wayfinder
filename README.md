@@ -1,31 +1,66 @@
+<div align="center">
+
 # Wayfinder
 
-An AI-powered personalized learning path recommender. You describe your goal in plain language; Wayfinder profiles you, finds your skill gaps, and sequences a roadmap of courses, projects and checkpoints — with prerequisites resolved, milestones that end in something you can show, and a reason attached to every single recommendation.
+**Describe what you want to be able to do. Get a learning path that actually sequences it.**
 
-**It runs end to end with no API key.** Every AI feature has a deterministic rule-based counterpart, so the product is fully functional out of the box and upgrades to a Groq-hosted model the moment you add a key.
+[![CI](https://github.com/abjt01/wayfinder/actions/workflows/ci.yml/badge.svg)](https://github.com/abjt01/wayfinder/actions/workflows/ci.yml)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org)
+[![React 19](https://img.shields.io/badge/React-19-087ea4?logo=react&logoColor=white)](https://react.dev)
+[![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![API key optional](https://img.shields.io/badge/API%20key-optional-2f5d4f)](#the-two-engines)
+
+</div>
+
+![The Wayfinder landing page](docs/screenshots/hero.png)
+
+Wayfinder reads a goal written in plain language, works out what the learner already
+knows, finds the gap, and sequences a roadmap of courses, projects and checkpoints —
+prerequisites resolved, milestones that each end in something demonstrable, and a
+reason attached to every single recommendation.
+
+**It runs end to end with no API key.** Every AI feature has a deterministic
+rule-based counterpart, so the product is fully functional the moment you clone it,
+and upgrades to a Groq-hosted model the moment you add a key. Nothing is a stub.
 
 ---
 
-## Run it
+## Contents
 
-### Local (npm)
+- [Quick start](#quick-start)
+- [What it does](#what-it-does)
+- [How a recommendation is made](#how-a-recommendation-is-made)
+- [The two engines](#the-two-engines)
+- [API](#api)
+- [Project structure](#project-structure)
+- [Configuration](#configuration)
+- [Rate limiting](#rate-limiting)
+- [Testing](#testing)
+- [Continuous integration](#continuous-integration)
+- [Deployment](#deployment)
+- [Design](#design)
+- [Known limitations](#known-limitations)
+
+---
+
+## Quick start
 
 ```bash
 npm install
-npm run dev              # http://localhost:3000
+npm run dev          # http://localhost:3000
 ```
 
-That's it — no key, no database, no services. To use Groq instead of the local engine:
+No key, no database, no services. To use Groq instead of the built-in engine:
 
 ```bash
-cp .env.example .env.local   # add your key from https://console.groq.com/keys
+cp .env.example .env.local   # add a key from https://console.groq.com/keys
 npm run dev
 ```
 
 ### Docker
 
 ```bash
-docker compose up --build            # http://localhost:3000
+docker compose up --build    # http://localhost:3000
 ```
 
 Or without compose:
@@ -35,119 +70,253 @@ npm run docker:build
 docker run --rm -p 3000:3000 wayfinder
 ```
 
-Pass a key when you have one — the container works either way:
+The container works with or without a key:
 
 ```bash
 GROQ_API_KEY=gsk_... docker compose up --build
-# or
-docker run --rm -p 3000:3000 --env-file .env.local wayfinder
 ```
 
-The image is a three-stage build (`deps` → `builder` → `runner`) on `node:22-alpine`, shipping only the Next.js standalone output, running as a non-root user, with a `HEALTHCHECK` against `/api/health`.
+---
 
-Standalone output is opt-in, via `BUILD_STANDALONE=1`, which the Dockerfile's builder stage sets. Managed hosts package the app themselves and the extra output trips their build, so every non-Docker build — local, CI, Vercel — gets the default output instead. One config serves both targets.
+## What it does
 
-### Verify it works
+| | |
+|:--|:--|
+| **Profile.** Free text becomes a typed profile — role, level, interests, existing skills, time budget. Everything inferred is shown back and stays editable, because a wrong level changes the whole path. | <img src="docs/screenshots/profile.png" alt="Profiling step" width="460"> |
+| **Sequence.** The roadmap as a journey map: milestones as columns, resources as nodes, the solid line showing how far you actually got. Every item carries its own rationale and prerequisite note. | <img src="docs/screenshots/path.png" alt="The generated path" width="460"> |
+| **Track.** Completion ring, hours logged, pace against target, per-skill development, milestone timeline, and a progress review that reads your real numbers and says what to do this week. | <img src="docs/screenshots/dashboard.png" alt="Progress dashboard" width="460"> |
+| **Inspect.** The entire catalog the recommender draws from, filterable by kind, level and domain, with the entries already in your path marked. Nothing outside this list can be recommended. | <img src="docs/screenshots/explore.png" alt="Catalog browser" width="460"> |
+
+### Pages
+
+| Route | What it is |
+| --- | --- |
+| `/` | The goal interview. Type in plain language, confirm what was understood, generate. |
+| `/path` | The roadmap: journey map, skill-gap radar, milestone panels, per-item reasoning, and a feedback box that re-sequences everything. |
+| `/dashboard` | Progress, pace, per-skill development, milestone timeline, and an AI progress review. |
+| `/explore` | The whole catalog, filterable, showing what the recommender can draw from. |
+
+### Interaction
+
+- **⌘K** — command palette. Navigate, jump to any milestone or resource, mark the next item complete, ask the assistant, reset.
+- **A** or **⌘J** — assistant drawer. Available on every page, keeps its transcript across navigation, streams token by token.
+- Journey map nodes are hoverable, focusable and clickable; clicking scrolls to the resource.
+- Scroll-spy milestone rail, reveal-on-scroll, count-up statistics, animated route drawing — all gated behind `prefers-reduced-motion`.
+
+---
+
+## How a recommendation is made
+
+```mermaid
+flowchart LR
+    A["Free text goal"] --> B["Profile<br/>typed, clamped, editable"]
+    B --> C["Retrieve<br/>score the catalog"]
+    C --> D{"API key?"}
+    D -->|yes| E["Groq<br/>sequence into milestones"]
+    D -->|no| F["Local engine<br/>topological sort"]
+    E -->|"error, timeout, or nothing valid"| F
+    E --> G["Validate<br/>against the catalog"]
+    F --> G
+    G --> H["Learning path"]
+    H -->|feedback| C
+```
+
+1. **Profile.** Free text becomes a typed `Profile` — goal, role, level, interests, known skills, completed courses, weekly hours, target weeks, preferences. Every field is clamped and validated server-side, then shown back to the learner to correct.
+2. **Retrieve.** `retrieveCourses()` scores the catalog on token overlap with the goal and interests, nudges toward the learner's level, and pulls in the prerequisite closure of what it picks. **Only this slice is ever shown to the model**, which is why a recommendation cannot be invented.
+3. **Sequence.** The slice is ordered into milestones with a per-item rationale, respecting prerequisites and the time budget.
+4. **Validate.** `buildPath()` discards any course id not in the catalog, drops duplicates and anything already completed, and recomputes total hours from real catalog data. An unusable path is rejected rather than rendered.
+5. **Adapt.** Feedback — "too long", "more projects", "start harder" — goes back with a digest of the current path, and the whole thing is rebuilt around it.
+
+The catalog is 43 entries: 29 courses, 6 projects, 5 checkpoints and 3 readings across
+13 domains, 882 hours in total, with prerequisites as real edges between them.
+
+---
+
+## The two engines
+
+`lib/groq.ts` is tried first whenever a key exists — 45 second timeout, JSON mode, SSE
+streaming. On a **missing key, an API error, a timeout, output containing no valid
+catalog items, or a spent rate-limit budget**, the route falls through to
+`lib/localEngine.ts` and the request still succeeds. Responses carry
+`source: "groq" | "local"`; the chat stream carries an `X-Engine` header.
+
+The local engine is not a placeholder:
+
+- **Profiling** splits the text at the aspiration marker ("I want to…") and treats skills named in the *background* half as existing knowledge, so "3 years of Python, I want to be an ML engineer" correctly skips Python 101. Level comes from years-of-experience and self-description phrases; hours and deadlines from duration parsing.
+- **Path building** is a topological sort over real catalog prerequisites, with greedy fill against the hour budget, guaranteed project and checkpoint coverage, and a pass that pushes checkpoints after the courses that teach their skills.
+- **Coaching** is arithmetic over actual progress: pace needed against pace budgeted, hours remaining, stalled projects.
+
+This is what makes the app demonstrable anywhere, and what keeps it up when Groq rate-limits.
+
+---
+
+## API
+
+Every route validates its input, coerces the profile through `lib/profile.ts`, and
+degrades rather than failing.
+
+| Route | Body | Returns |
+| --- | --- | --- |
+| `POST /api/profile` | `{ message, previous? }` | `{ profile, followUp, source }` |
+| `POST /api/path` | `{ profile, feedback?, currentPath? }` | `{ path, source }` |
+| `POST /api/explain` | `{ courseId, profile, path? }` | `{ explanation, source }` |
+| `POST /api/chat` | `{ messages, profile, path, completed }` | `text/plain` stream, `X-Engine` header |
+| `POST /api/adapt` | `{ profile, path, completedIds, feedback? }` | `{ status, observations, nextActions, pathChange, source }` |
+| `GET /api/health` | — | `{ ok, engine, model, catalogSize, features }` |
+
+```bash
+curl -s localhost:3000/api/profile \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"I know SQL and some Python. I want to move into machine learning in 4 months, 8 hours a week."}'
+```
+
+---
+
+## Project structure
+
+```
+app/
+  api/            profile · path · explain · chat · adapt · health
+  page.tsx        goal interview        path/       the roadmap
+  dashboard/      progress              explore/    catalog browser
+components/       PathMap · SkillRadar · ProgressRing · CommandPalette
+                  AssistantHost · ItemCard · MilestoneSpine · ui primitives
+lib/
+  catalog.ts      the 43-entry catalog + keyword retrieval
+  localEngine.ts  the deterministic counterpart to every AI feature
+  buildPath.ts    validates engine output against the catalog
+  progress.ts     every "how far through the path" derivation
+  profile.ts      coerces any incoming profile into a complete one
+  rateLimit.ts    per-IP ceilings guarding the key and the server
+  groq.ts         chatText · chatJSON · streamText
+scripts/
+  verify.ts       110 end-to-end assertions over the real HTTP API
+```
+
+---
+
+## Configuration
+
+| Variable | Required | Default | Effect |
+| --- | --- | --- | --- |
+| `GROQ_API_KEY` | no | — | Absent → deterministic local engine. Present → Groq. |
+| `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Any Groq chat model. |
+| `BUILD_STANDALONE` | no | — | `1` emits `.next/standalone` for the Docker image. Set by the Dockerfile; leave unset everywhere else. |
+
+---
+
+## Rate limiting
+
+Two per-IP ceilings in `lib/rateLimit.ts`, deliberately loose, guarding different things.
+
+| Ceiling | Limit | On exceeding |
+| --- | --- | --- |
+| **Groq budget** | 30 / min | Falls through to the local engine and carries `X-Engine-Degraded: rate-limit`. Never an error — the learner still gets a path, the key just stops paying for it. |
+| **Hard limit** | 120 / min | `429` with `Retry-After`. The only one that refuses. |
+
+One bucket covers all routes, so the ceiling is on what a caller costs in total rather
+than per endpoint. `/api/health` is exempt, so the container healthcheck never consumes
+allowance. Counters live in process memory: behind N replicas the effective ceiling is
+N times these numbers, which is fine for the protection intended. Put a shared store
+behind `hit()` if you ever need an exact global limit.
+
+---
+
+## Testing
 
 ```bash
 npm run dev        # in one shell
 npm run verify     # in another — 110 assertions over the real HTTP API
 ```
 
-`npm run verify` walks three personas end to end (profile → path → explain → chat → coach → adapt) and asserts the invariants that actually matter: prerequisites ordered, no invented courses, no duplicates, budgets respected, streaming alive, malformed profiles coerced rather than crashing, rate limiting enforced without being tight enough to hit a real session, pages rendering. Point it anywhere with `VERIFY_BASE`.
+`npm run verify` drives the actual HTTP surface rather than mocking it. It walks three
+learner personas end to end (profile → path → explain → chat → coach → adapt) and
+asserts the invariants that matter:
 
-```
+- prerequisites ordered, no invented courses, no duplicates, every item carries a rationale
+- hours recomputed from the catalog, budgets respected, at least one project and one checkpoint
+- streaming alive, and adaptation actually changing the path
+- malformed and stale profiles coerced rather than crashing the route
+- rate limiting enforced, but loose enough that a real session never meets it
+- every page rendering, and a 404 that 404s
+
+Point it at any deployment with `VERIFY_BASE`. Requests carry a per-section caller
+address, randomised per run, so the suite never trips its own limiter.
+
+```bash
 npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
 npm run build        # production build
 ```
 
-### CI
+---
 
-`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+## Continuous integration
 
-- **check** — install, lint, typecheck, build, boot the production server, run the full end-to-end suite against it.
-- **docker** — build the image, run it, wait for the healthcheck, and smoke test that it serves the app with no API key set.
+`.github/workflows/ci.yml` runs on every push and pull request to `main`, cancelling
+superseded runs:
 
-Nothing is published. The image is built and exercised, not pushed; deployment stays with the host's git integration.
+- **check** — install from the lockfile, lint, typecheck, build, boot the production server, run the full end-to-end suite against it. The build deliberately omits `BUILD_STANDALONE` so CI exercises the same output a managed host produces.
+- **docker** — build the image, run it, wait for the healthcheck, then smoke test that it serves the app with no API key at all.
 
-### Environment
-
-| Var | Required | Default | Effect |
-| --- | --- | --- | --- |
-| `GROQ_API_KEY` | no | — | Absent → deterministic local engine. Present → Groq. |
-| `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Any Groq chat model. |
-| `BUILD_STANDALONE` | no | — | `1` emits `.next/standalone` for the Docker image. Set by the Dockerfile; leave unset everywhere else. |
-
-### Rate limiting
-
-Two per-IP ceilings, in `lib/rateLimit.ts`, protecting different things:
-
-- **30 Groq-backed requests a minute** guards the API key. Crossing it does not fail anything — the request falls through to the local engine, exactly as it does for a missing key or a Groq outage, and the response carries `X-Engine-Degraded: rate-limit`. One bucket covers all routes, so the ceiling is on what a caller costs in total rather than per endpoint.
-- **120 requests a minute** guards the server and is the only one that returns `429`, with `Retry-After`. `/api/health` is exempt so the container healthcheck never consumes allowance.
-
-Counters live in process memory, so behind N replicas the effective ceiling is N times these numbers. Put a shared store behind `hit()` if you ever need an exact global limit.
+Nothing is published: the image is built and exercised, not pushed. Deployment stays
+with the host's git integration; a registry login and push step slot into the docker
+job when there is somewhere to send it.
 
 ---
 
-## What's in it
+## Deployment
 
-| Brief requirement | Where it lives |
-| --- | --- |
-| Conversational interface for goals in natural language | `app/page.tsx` → `POST /api/profile` |
-| Learner profiling engine | `app/api/profile/route.ts`, editable via `components/ProfileEditor.tsx` |
-| Recommendation engine | `lib/catalog.ts` — 43-resource catalog + keyword retrieval |
-| Path generator with prerequisites and milestones | `app/api/path/route.ts` + `lib/buildPath.ts` + `lib/localEngine.ts` |
-| AI assistant that explains recommendations and answers queries | `components/AssistantHost.tsx`, `/api/chat` (streaming), `/api/explain` |
-| Adaptation from feedback and progress | `/api/path` with `feedback`, `/api/adapt` |
-| Dashboard: progress, skills, milestones, next actions | `app/dashboard/page.tsx` |
+Three-stage `Dockerfile` (`deps` → `builder` → `runner`) on `node:22-alpine`, shipping
+only the Next.js standalone output, running as a non-root user, with a `HEALTHCHECK`
+against `/api/health`.
 
-### Pages
-
-- **`/`** — the goal interview. Type in plain language, get a structured profile back, correct anything it read wrong, generate.
-- **`/path`** — the roadmap: an interactive journey map, a skill-gap radar, milestone panels, per-item reasoning, and a feedback box that re-sequences the whole path.
-- **`/dashboard`** — completion ring, hours logged, pace-vs-target, per-skill development, milestone timeline, and an AI progress review with concrete next actions.
-- **`/explore`** — the whole catalog, filterable, showing exactly what the recommender can draw from and which entries landed in your path.
-
-### Interaction
-
-- **⌘K** command palette — navigate, jump to any milestone or resource, mark the next item complete, ask the assistant a canned question, reset.
-- **A** or **⌘J** — assistant drawer, available on every page, keeps its transcript across navigation, streams token by token.
-- Journey map nodes are hoverable, focusable and clickable (click scrolls to the resource).
-- Scroll-spy milestone rail, reveal-on-scroll, count-up statistics, animated route drawing — all respecting `prefers-reduced-motion`.
-
----
-
-## How a recommendation is made
-
-1. **Profile.** Free text becomes a typed `Profile` (goal, role, level, interests, known skills, completed courses, weekly hours, target weeks, preferences). Server-side every field is clamped and validated; the learner can then edit all of it.
-2. **Retrieve.** `retrieveCourses()` scores the catalog on token overlap with the goal and interests, nudges toward the learner's level, and pulls in the prerequisite closure of everything it picks. Only this slice is ever shown to the model.
-3. **Sequence.** The slice is ordered into milestones with a per-item rationale, respecting prerequisites and the learner's time budget.
-4. **Validate.** `buildPath()` discards any course id that isn't in the catalog, drops duplicates and anything already completed, and recomputes total hours from real catalog data. An unusable path is rejected rather than rendered.
-5. **Adapt.** Feedback ("too long", "more projects", "start harder") is sent back with a digest of the current path, and the path is rebuilt around it.
-
-### The two engines
-
-`lib/groq.ts` (45s timeout, JSON mode, SSE streaming) is tried first when a key exists. On a missing key, an API error, a timeout, or output that contains no valid catalog items, the route falls through to `lib/localEngine.ts` and the request still succeeds — the response carries `source: "groq" | "local"` and the header `X-Engine` on the chat stream.
-
-The local engine is not a stub:
-
-- **Profiling** splits the text at the aspiration marker ("I want to…") and treats skills named in the *background* half as existing knowledge, so "3 years of Python, I want to be an ML engineer" correctly skips Python 101. Level comes from years-of-experience and self-description phrases; hours and target dates come from date/duration parsing.
-- **Path building** is a topological sort over real catalog prerequisites, with greedy fill against the hour budget, guaranteed project and checkpoint coverage, and a pass that pushes assessments after the courses that teach their skills.
-- **Coaching** is arithmetic over actual progress: pace needed vs. pace budgeted, hours remaining, stalled projects.
+Standalone output is **opt-in**, gated on `BUILD_STANDALONE=1`, which only the
+Dockerfile's builder stage sets. Managed hosts package the app themselves and the extra
+output trips their build. Keeping it conditional means one config serves both targets,
+with no diverging file on a deploy branch.
 
 ---
 
 ## Design
 
-Editorial paper-and-ink rather than dashboard-generic: warm paper ground with a 1px graph-paper grid, a serif display face for headings, hairline rules, tabular figures, a single rust accent plus green for complete and ochre for in-progress. Charts are hand-rolled SVG — journey map, radar, arc gauge, segmented meters — no chart library. Deliberately avoided: gradient glows, glassmorphism, purple-on-dark, status pills, all-caps letter-spaced eyebrows, gradient text, emoji in UI.
+Editorial paper-and-ink rather than dashboard-generic: a warm paper ground with a 1px
+graph-paper grid, a serif display face for headings, hairline rules, tabular figures,
+one rust accent plus green for complete and ochre for in-progress.
 
-## Stack
+Every chart is hand-rolled SVG — journey map, radar, arc gauge, segmented meters — so
+there is no chart library and no chart-library look. Deliberately avoided: gradient
+glows, glassmorphism, purple-on-dark, status pills, all-caps letter-spaced eyebrows,
+gradient text, emoji in the interface.
 
-Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS v4 · zustand (localStorage persistence) · Groq API via `fetch`, no SDK · zero runtime dependencies beyond those.
+Verified in a real browser at 320, 375, 414, 768, 1024 and 1440 pixels: nothing
+overflows its viewport on any page, and the console is clean.
 
-## Notes and limits
+### Stack
+
+Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS v4 · zustand with
+localStorage persistence · Groq via raw `fetch`, no SDK. Four runtime dependencies in
+total: `next`, `react`, `react-dom`, `zustand`.
+
+---
+
+## Known limitations
+
+Honest about what is not finished. These live in retrieval and the local path builder;
+none of them are interface bugs.
+
+- **Retrieval is permissive.** The score threshold in `retrieveCourses()` can be met on level bonus alone, so a beginner asking for devops can see product and design entries surface.
+- **Prerequisite closure is one level deep**, so a path can contain pandas without Python ahead of it.
+- **Low weekly budgets overrun.** A minimum item count overrides the budget check, and the guaranteed project and checkpoint are appended without counting toward it.
+- **Completed courses are matched loosely.** Matching needs one title to contain the other, which free text rarely satisfies.
+- **Age is read as experience.** "I'm 25 years old and a total beginner" profiles as advanced.
+
+`npm run verify` stays green through all of these because it only checks the ordering
+of prerequisites already present in the path. Fixing the first two should come with
+assertions for external prerequisite coverage and budget ratio.
+
+### Scope
 
 - State is per-browser `localStorage`. No database, no auth — swap `lib/store.ts` for a server store to make it multi-user.
-- The catalog stands in for a real platform's course DB. Replace `CATALOG` in `lib/catalog.ts` (keeping prerequisite ids valid) and everything else keeps working.
-- Catalog URLs point at real provider landing pages; project and assessment entries are Wayfinder-native and have no external link.
+- The catalog stands in for a real platform's course database. Replace `CATALOG` in `lib/catalog.ts`, keep the prerequisite ids valid, and everything else keeps working.
+- Catalog URLs point at real provider landing pages. Project and checkpoint entries are Wayfinder-native and have no external link.
