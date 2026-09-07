@@ -5,7 +5,7 @@ import { KindGlyph, KindTag } from "@/components/KindGlyph";
 import { useAssistant } from "@/components/AssistantHost";
 import { Button, Chip, Panel, PanelHead, Stat } from "@/components/ui";
 import { CATALOG, COURSE_BY_ID } from "@/lib/catalog";
-import { useStore } from "@/lib/store";
+import { useHydrated, useStore } from "@/lib/store";
 import type { Course, Level } from "@/lib/types";
 
 const KINDS: Course["kind"][] = ["course", "project", "assessment", "reading"];
@@ -13,6 +13,7 @@ const LEVELS: Level[] = ["beginner", "intermediate", "advanced"];
 const DOMAINS = Array.from(new Set(CATALOG.map((c) => c.domain))).sort();
 
 export default function ExplorePage() {
+  const hydrated = useHydrated();
   const { path } = useStore();
   const assistant = useAssistant();
   const [q, setQ] = useState("");
@@ -21,9 +22,16 @@ export default function ExplorePage() {
   const [domain, setDomain] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
+  // Empty until localStorage has been read, so the first client render matches
+  // the prerendered HTML.
   const inPath = useMemo(
-    () => new Set(path?.milestones.flatMap((m) => m.items.map((i) => i.courseId)).filter(Boolean) as string[]),
-    [path]
+    () =>
+      new Set(
+        hydrated
+          ? (path?.milestones.flatMap((m) => m.items.map((i) => i.courseId)).filter(Boolean) as string[])
+          : []
+      ),
+    [path, hydrated]
   );
 
   const results = useMemo(() => {
@@ -43,7 +51,7 @@ export default function ExplorePage() {
   const active = kind || level || domain || q.trim();
 
   return (
-    <div className="mx-auto max-w-[1180px] px-5 py-8">
+    <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-8">
       <header className="border-b border-rule pb-6">
         <p className="t-meta">THE CATALOG</p>
         <h1 className="t-h1 mt-2">Everything Wayfinder can recommend</h1>
@@ -55,11 +63,15 @@ export default function ExplorePage() {
           <Stat label="ENTRIES" value={CATALOG.length} sub={`${results.length} shown`} />
           <Stat label="TOTAL EFFORT" value={totalHours} suffix="h" sub="in the current filter" />
           <Stat label="DOMAINS" value={DOMAINS.length} sub="across the catalog" />
-          <Stat label="IN YOUR PATH" value={inPath.size} sub={path ? "selected for you" : "no path yet"} />
+          <Stat
+            label="IN YOUR PATH"
+            value={inPath.size}
+            sub={hydrated && path ? "selected for you" : "no path yet"}
+          />
         </div>
       </header>
 
-      <div className="sticky top-14 z-30 -mx-5 border-b border-rule bg-paper/95 px-5 py-3 backdrop-blur-[2px]">
+      <div className="sticky top-14 z-30 -mx-4 border-b border-rule bg-paper/95 px-4 py-3 backdrop-blur-[2px] sm:-mx-5 sm:px-5">
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={q}
@@ -82,23 +94,31 @@ export default function ExplorePage() {
             </Button>
           )}
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        {/* One scrollable row on phones — wrapping every filter would push the
+            catalog itself off screen under a sticky bar. */}
+        <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto pb-0.5 sm:flex-wrap sm:overflow-x-visible sm:pb-0">
           {KINDS.map((k) => (
-            <Chip key={k} active={kind === k} onClick={() => setKind(kind === k ? null : k)}>
-              {k}
-            </Chip>
+            <span key={k} className="shrink-0">
+              <Chip active={kind === k} onClick={() => setKind(kind === k ? null : k)}>
+                {k}
+              </Chip>
+            </span>
           ))}
-          <span className="mx-1 w-px bg-rule" />
+          <span className="mx-1 w-px shrink-0 bg-rule" />
           {LEVELS.map((l) => (
-            <Chip key={l} active={level === l} onClick={() => setLevel(level === l ? null : l)}>
-              {l}
-            </Chip>
+            <span key={l} className="shrink-0">
+              <Chip active={level === l} onClick={() => setLevel(level === l ? null : l)}>
+                {l}
+              </Chip>
+            </span>
           ))}
-          <span className="mx-1 w-px bg-rule" />
+          <span className="mx-1 w-px shrink-0 bg-rule" />
           {DOMAINS.map((d) => (
-            <Chip key={d} active={domain === d} onClick={() => setDomain(domain === d ? null : d)}>
-              {d}
-            </Chip>
+            <span key={d} className="shrink-0">
+              <Chip active={domain === d} onClick={() => setDomain(domain === d ? null : d)}>
+                {d}
+              </Chip>
+            </span>
           ))}
         </div>
       </div>

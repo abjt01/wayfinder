@@ -63,7 +63,7 @@ export default function PathPage() {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto max-w-[1180px] px-5 py-20">
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-20">
         <Spinner label="Loading your path" />
       </div>
     );
@@ -71,7 +71,7 @@ export default function PathPage() {
 
   if (!path || !profile || !stats) {
     return (
-      <div className="mx-auto max-w-2xl px-5 py-20">
+      <div className="mx-auto max-w-2xl px-4 sm:px-5 py-20">
         <Empty
           title="No learning path yet"
           body="Describe your goal on the start page and Wayfinder will sequence one for you."
@@ -88,7 +88,7 @@ export default function PathPage() {
   let counter = 0;
 
   return (
-    <div className="mx-auto max-w-[1180px] px-5 py-8">
+    <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-8">
       {/* ---------- header ---------- */}
       <header className="border-b border-rule pb-7">
         <p className="t-meta">YOUR PATH · {profile.role}</p>

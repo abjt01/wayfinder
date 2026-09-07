@@ -41,6 +41,8 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Long goals, skill names and URLs break instead of widening the page. */
+  overflow-wrap: break-word;
 }
 
 * {
@@ -279,6 +281,15 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 8px 22px -14px rgb(26 26 23 / 0.32);
   border-color: var(--color-ink-faint);
+}
+
+/* Scrollable strip with no visible scrollbar — mobile nav and filter rows */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Thin scrollbars inside panes */

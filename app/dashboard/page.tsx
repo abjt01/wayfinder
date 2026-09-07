@@ -83,7 +83,7 @@ export default function DashboardPage() {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto max-w-[1180px] px-5 py-20">
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-20">
         <Spinner label="Loading your dashboard" />
       </div>
     );
@@ -91,7 +91,7 @@ export default function DashboardPage() {
 
   if (!path || !profile || !stats) {
     return (
-      <div className="mx-auto max-w-2xl px-5 py-20">
+      <div className="mx-auto max-w-2xl px-4 sm:px-5 py-20">
         <Empty
           title="Nothing to track yet"
           body="Generate a learning path and your progress, skill development and milestones show up here."
@@ -108,7 +108,7 @@ export default function DashboardPage() {
   const behind = stats.weeksLeft > profile.targetWeeks;
 
   return (
-    <div className="mx-auto max-w-[1180px] px-5 py-8">
+    <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-6">
         <div className="min-w-0">
           <p className="t-meta">PROGRESS · {profile.role}</p>
@@ -223,17 +223,17 @@ export default function DashboardPage() {
                   <span className="t-num w-8 shrink-0 text-[20px] text-ink-faint">
                     {String(i + 1).padStart(2, "0")}
                   </span>
-                  <span className="min-w-[180px] flex-1">
+                  <span className="min-w-[140px] flex-1">
                     <span className="block text-[14px]">{m.title}</span>
                     <span className="t-meta">
                       {m.weeks} · {m.outcome.slice(0, 70)}
                       {m.outcome.length > 70 ? "…" : ""}
                     </span>
                   </span>
-                  <span className="w-40 shrink-0">
+                  <span className="w-24 shrink-0 sm:w-40">
                     <Meter value={pct} segments={16} tone={pct === 100 ? "moss" : "ink"} />
                   </span>
-                  <span className="w-24 shrink-0 text-right">
+                  <span className="shrink-0 text-right sm:w-24">
                     <Chip tone={pct === 100 ? "moss" : pct > 0 ? "ochre" : "neutral"}>{state}</Chip>
                   </span>
                 </li>

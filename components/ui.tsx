@@ -177,12 +177,18 @@ export function Stat({
 }) {
   const numeric = typeof value === "number" ? value : NaN;
   const counted = useCountUp(Number.isFinite(numeric) ? numeric : 0, 900);
-  const shown =
-    typeof value === "number" && animate ? Math.round(counted).toLocaleString() : String(value);
+  const isNumeric = typeof value === "number";
+  const shown = isNumeric && animate ? Math.round(counted).toLocaleString() : String(value);
   return (
-    <div>
+    <div className="min-w-0">
       <p className="t-meta">{label}</p>
-      <p className="t-num mt-1 text-[30px] leading-none">
+      {/* Numbers get the full editorial size; word values are set smaller and
+          allowed to wrap, so a long role name cannot overflow its grid cell. */}
+      <p
+        className={`t-num mt-1 ${
+          isNumeric ? "text-[30px] leading-none" : "text-[19px] leading-snug break-words"
+        }`}
+      >
         {shown}
         {suffix && <span className="ml-0.5 text-[15px] text-ink-mute">{suffix}</span>}
       </p>
