@@ -29,7 +29,8 @@ export function CommandPalette() {
   useHotkeys([
     { key: "k", meta: true, run: () => setOpen((v) => !v) },
     { key: "/", run: () => setOpen(true) },
-    { key: "Escape", run: () => setOpen(false) },
+    // The palette focuses its own input on open, so Escape has to survive that.
+    { key: "Escape", allowInInput: true, run: () => setOpen(false) },
   ]);
   useScrollLock(open);
 

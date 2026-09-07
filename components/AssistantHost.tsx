@@ -119,6 +119,8 @@ export function AssistantHost({ children }: { children: ReactNode }) {
   useHotkeys([
     { key: "j", meta: true, run: () => setOpen((v) => !v) },
     { key: "a", run: () => setOpen(true) },
+    // A dialog must be dismissable from the keyboard, including from its input.
+    { key: "Escape", allowInInput: true, run: () => setOpen(false) },
   ]);
   useScrollLock(isOpen);
 
