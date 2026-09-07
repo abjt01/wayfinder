@@ -47,7 +47,7 @@ export default function StartPage() {
   const revealA = useReveal();
   const revealB = useReveal();
 
-  const step = !profile ? 0 : 1;
+  const step = path ? 2 : profile ? 1 : 0;
 
   useEffect(() => {
     if (profile && confirmRef.current) {
@@ -63,7 +63,7 @@ export default function StartPage() {
     setProfile(data.profile);
     setFollowUp(data.followUp || "");
     setAnswer("");
-    push(data.source === "local" ? "Profile read by the local engine" : "Profile read by Groq");
+    push("Profile ready — check it below, then generate your path", "moss");
   }
 
   async function generate(p: Profile) {
@@ -76,14 +76,14 @@ export default function StartPage() {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto max-w-[1180px] px-5 py-20">
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-5 py-20">
         <Spinner label="Loading your workspace" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1180px] px-5">
+    <div className="mx-auto max-w-[1180px] px-4 sm:px-5">
       {/* ---------- hero ---------- */}
       <section className="grid items-center gap-10 border-b border-rule py-14 lg:grid-cols-[1.05fr_0.95fr] lg:py-20">
         <div>
@@ -276,6 +276,21 @@ export default function StartPage() {
                       </Button>
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Primary action sits with the summary, so the next step is on
+                  screen the moment the profile lands — not below the editor. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-rule px-5 py-4">
+                <Button onClick={() => generate(profile)} disabled={pathCall.loading}>
+                  {pathCall.loading ? "Building your path…" : "Generate learning path"}
+                </Button>
+                {pathCall.loading ? (
+                  <Spinner label="Ordering prerequisites and cutting to your time budget" />
+                ) : (
+                  <p className="text-[12.5px] text-ink-mute">
+                    Looks right? Generate it. Anything read wrong is editable below.
+                  </p>
                 )}
               </div>
             </Panel>
