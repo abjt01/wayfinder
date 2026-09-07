@@ -67,7 +67,7 @@ configuration — do not "simplify" it away.
 - `lib/groq.ts` — `chatText` / `chatJSON` / `streamText`, 45s AbortController
   timeout, `hasKey()`.
 - `lib/hooks.ts` — `useReveal`, `useCountUp`, `useScrollSpy`, `useHotkeys`,
-  `useScrollLock`, `usePost`, `useReducedMotion`, `useIsMac`.
+  `useScrollLock`, `usePost`, `useReducedMotion`.
 - `lib/store.ts` — localStorage state (`wayfinder-v1`) plus `useHydrated()`.
 - `lib/mdlite.tsx` — tiny inline formatter for streamed assistant prose.
 - Routes: `/api/profile`, `/api/path` (generate and adapt), `/api/chat`
