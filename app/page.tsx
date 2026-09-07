@@ -44,14 +44,24 @@ export default function StartPage() {
   const profileCall = usePost<{ profile: Profile; followUp: string; source: string }>();
   const pathCall = usePost<{ path: LearningPath; source: string }>();
   const confirmRef = useRef<HTMLDivElement>(null);
+  const actionRef = useRef<HTMLDivElement>(null);
   const revealA = useReveal();
   const revealB = useReveal();
 
   const step = path ? 2 : profile ? 1 : 0;
 
   useEffect(() => {
-    if (profile && confirmRef.current) {
-      confirmRef.current.scrollIntoView({ block: "start" });
+    if (!profile) return;
+    const action = actionRef.current;
+    const panel = action?.closest("section");
+    // On a short viewport the summary alone can be taller than the screen, so
+    // scrolling to its top would leave the action below the fold — the whole
+    // complaint this flow had. Land on the action instead and let the learner
+    // read upward; only scroll to the top when everything fits anyway.
+    if (action && panel && panel.offsetHeight > window.innerHeight - 80) {
+      action.scrollIntoView({ block: "end" });
+    } else {
+      confirmRef.current?.scrollIntoView({ block: "start" });
     }
   }, [profile]);
 
@@ -220,7 +230,9 @@ export default function StartPage() {
               <div className="px-5 py-4">
                 <p className="font-display text-[19px] leading-snug">{profile.goal}</p>
 
-                <div className="mt-4 grid gap-5 border-t border-rule pt-4 sm:grid-cols-4">
+                {/* Two up on phones rather than four stacked: keeps the panel
+                    short enough that the action below it stays reachable. */}
+                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-rule pt-4 sm:grid-cols-4 sm:gap-5">
                   <Stat label="TARGET ROLE" value={profile.role} animate={false} />
                   <Stat label="LEVEL" value={profile.level} animate={false} />
                   <Stat label="HOURS / WEEK" value={profile.weeklyHours} />
@@ -281,7 +293,10 @@ export default function StartPage() {
 
               {/* Primary action sits with the summary, so the next step is on
                   screen the moment the profile lands — not below the editor. */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-rule px-5 py-4">
+              <div
+                ref={actionRef}
+                className="flex scroll-mb-6 flex-wrap items-center gap-x-3 gap-y-2 border-t border-rule px-5 py-4"
+              >
                 <Button onClick={() => generate(profile)} disabled={pathCall.loading}>
                   {pathCall.loading ? "Building your path…" : "Generate learning path"}
                 </Button>

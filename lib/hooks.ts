@@ -23,10 +23,12 @@ export function useReducedMotion() {
  * observer would never attach — leaving `.reveal`'s `opacity: 0` permanent and
  * the content invisible. A callback ref fires whenever the node appears.
  *
- * A timer also force-reveals the node shortly after it mounts, so a missed or
- * never-firing IntersectionObserver can never hide content for good.
+ * Anything already within the viewport reveals synchronously on attach, so
+ * content that appears above the fold is never blank for even a frame. Only
+ * genuinely below-the-fold nodes wait for a scroll. A timer backs both up, so
+ * a missed or never-firing observer can never hide content for good.
  */
-const REVEAL_FAILSAFE_MS = 1200;
+const REVEAL_FAILSAFE_MS = 600;
 
 export function useReveal<T extends HTMLElement = HTMLElement>() {
   const cleanup = useRef<(() => void) | null>(null);
@@ -41,6 +43,16 @@ export function useReveal<T extends HTMLElement = HTMLElement>() {
     const show = () => el.classList.add("is-in");
 
     if (typeof IntersectionObserver === "undefined") {
+      show();
+      return;
+    }
+
+    // Already on screen, or scrolled past: reveal now. The class still drives
+    // the entrance animation, so nothing is lost visually. This is what keeps
+    // a tall panel on a narrow screen from sitting invisible while the
+    // observer waits for a scroll that never comes.
+    const rect = el.getBoundingClientRect();
+    if (rect.top < (window.innerHeight || 0)) {
       show();
       return;
     }
