@@ -1,6 +1,7 @@
 "use client";
 
 import { useScrollSpy } from "@/lib/hooks";
+import { milestoneProgress } from "@/lib/progress";
 import type { LearningPath } from "@/lib/types";
 
 /** Sticky scroll-spy rail: shows where you are in the path while reading it. */
@@ -17,8 +18,7 @@ export function MilestoneSpine({
   return (
     <nav aria-label="Milestones" className="space-y-0">
       {path.milestones.map((m, i) => {
-        const done = m.items.filter((it) => completed.includes(it.id)).length;
-        const pct = Math.round((done / m.items.length) * 100);
+        const { done, pct } = milestoneProgress(m, completed);
         const isActive = active === m.id;
         return (
           <a

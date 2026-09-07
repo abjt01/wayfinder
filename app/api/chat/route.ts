@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { streamText } from "@/lib/groq";
-import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
+import { DEGRADED_HEADERS, guardRequest } from "@/lib/rateLimit";
 import { localChat, textToStream } from "@/lib/localEngine";
 import { ASSISTANT_SYSTEM, profileBlock } from "@/lib/prompts";
 import { hasGoal, normalizeProfile } from "@/lib/profile";
@@ -17,12 +17,7 @@ const STREAM_HEADERS = {
 
 export async function POST(req: Request) {
   const gate = guardRequest(req);
-  if (gate.rejected) {
-    return NextResponse.json(tooManyBody(gate.rejected), {
-      status: 429,
-      headers: tooManyHeaders(gate.rejected),
-    });
-  }
+  if (gate.rejected) return gate.rejected;
 
   let messages: ChatMessage[] = [];
   let profile: Profile | null = null;
@@ -79,7 +74,7 @@ export async function POST(req: Request) {
     headers: {
       ...STREAM_HEADERS,
       "X-Engine": "local",
-      ...(gate.degraded ? { "X-Engine-Degraded": "rate-limit" } : {}),
+      ...(gate.degraded ? DEGRADED_HEADERS : {}),
     },
   });
 }

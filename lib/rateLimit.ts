@@ -20,13 +20,13 @@
 
 import { hasKey } from "./groq";
 
-export type Rule = { limit: number; windowMs: number };
+type Rule = { limit: number; windowMs: number };
 
 /** Groq-backed work per IP before requests degrade to the local engine. */
-export const GROQ_BUDGET: Rule = { limit: 30, windowMs: 60_000 };
+const GROQ_BUDGET: Rule = { limit: 30, windowMs: 60_000 };
 
 /** Total requests per IP before the server refuses outright. */
-export const HARD_LIMIT: Rule = { limit: 120, windowMs: 60_000 };
+const HARD_LIMIT: Rule = { limit: 120, windowMs: 60_000 };
 
 type Window = { count: number; resetAt: number };
 
@@ -41,7 +41,7 @@ function sweep(now: number) {
   }
 }
 
-export type Verdict = {
+type Verdict = {
   ok: boolean;
   /** Requests left in the current window, after this one. */
   remaining: number;
@@ -53,7 +53,7 @@ export type Verdict = {
  * Counts one hit of `name` for `ip` against `rule`. Fixed window: simple,
  * allocation-free per request, and precise enough for a ceiling this loose.
  */
-export function hit(ip: string, name: string, rule: Rule): Verdict {
+function hit(ip: string, name: string, rule: Rule): Verdict {
   const now = Date.now();
   const key = `${name}:${ip}`;
   const existing = buckets.get(key);
@@ -78,7 +78,7 @@ export function hit(ip: string, name: string, rule: Rule): Verdict {
  * back to a single shared bucket, which is the safe direction to fail: it
  * throttles harder rather than handing out an unlimited allowance per request.
  */
-export function clientIp(req: Request): string {
+function clientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
     const first = forwarded.split(",")[0]?.trim();
@@ -87,38 +87,50 @@ export function clientIp(req: Request): string {
   return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-/** Headers describing the remaining allowance, for debugging and clients. */
-export function limitHeaders(v: Verdict, rule: Rule): Record<string, string> {
-  return {
-    "X-RateLimit-Limit": String(rule.limit),
-    "X-RateLimit-Remaining": String(Math.max(0, v.remaining)),
-  };
-}
-
-/** Test seam: drops all counters. */
-export function resetLimiter() {
-  buckets.clear();
+/** The 429 every route returns, built once so clients see one shape. */
+function tooMany(v: Verdict): Response {
+  return new Response(
+    JSON.stringify({
+      error: `Too many requests. Try again in ${v.retryAfter}s.`,
+      retryAfter: v.retryAfter,
+    }),
+    {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(v.retryAfter),
+        "X-RateLimit-Limit": String(HARD_LIMIT.limit),
+        "X-RateLimit-Remaining": "0",
+      },
+    }
+  );
 }
 
 /**
- * One call at the top of every AI route.
+ * One call at the top of every AI route:
  *
- * `rejected` non-null means the caller should return 429 and do nothing else.
- * `useGroq` false means answer from the local engine — either no key is set,
- * or this caller has spent its share of the key for the minute.
+ *     const gate = guardRequest(req);
+ *     if (gate.rejected) return gate.rejected;
  *
- * The Groq budget is one bucket per IP across all routes, not one per route,
- * so the ceiling is on what an IP costs in total rather than per endpoint.
+ * `rejected` is a ready-to-return 429. The response is built here rather than
+ * in each route so the five call sites cannot drift apart.
+ *
+ * `useGroq` false means answer from the local engine: either no key is set, or
+ * this caller has spent its share of the key for the minute. `degraded`
+ * separates the second case from the first, so the route can say which it was.
+ *
+ * The Groq budget is one bucket per IP across all routes, not one per route, so
+ * the ceiling is on what an IP costs in total rather than per endpoint.
  */
 export function guardRequest(req: Request): {
-  rejected: Verdict | null;
+  rejected: Response | null;
   useGroq: boolean;
   degraded: boolean;
 } {
   const ip = clientIp(req);
 
   const hard = hit(ip, "all", HARD_LIMIT);
-  if (!hard.ok) return { rejected: hard, useGroq: false, degraded: false };
+  if (!hard.ok) return { rejected: tooMany(hard), useGroq: false, degraded: false };
 
   if (!hasKey()) return { rejected: null, useGroq: false, degraded: false };
 
@@ -126,18 +138,10 @@ export function guardRequest(req: Request): {
   return { rejected: null, useGroq: budget.ok, degraded: !budget.ok };
 }
 
-/** The 429 body shared by every route, so clients see one shape. */
-export function tooManyBody(v: Verdict) {
-  return {
-    error: `Too many requests. Try again in ${v.retryAfter}s.`,
-    retryAfter: v.retryAfter,
-  };
-}
+/** Marks a local answer that Groq would have given had budget remained. */
+export const DEGRADED_HEADERS = { "X-Engine-Degraded": "rate-limit" } as const;
 
-export function tooManyHeaders(v: Verdict): Record<string, string> {
-  return {
-    "Retry-After": String(v.retryAfter),
-    "X-RateLimit-Limit": String(HARD_LIMIT.limit),
-    "X-RateLimit-Remaining": "0",
-  };
+/** Spread into a NextResponse.json init when the answer was degraded. */
+export function degradedInit(degraded: boolean) {
+  return degraded ? { headers: DEGRADED_HEADERS } : undefined;
 }

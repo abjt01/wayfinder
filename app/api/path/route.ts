@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { catalogLines, retrieveCourses } from "@/lib/catalog";
 import { buildPath, pathIsUsable, pathDigest, type RawPath } from "@/lib/buildPath";
 import { chatJSON } from "@/lib/groq";
-import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
+import { degradedInit, guardRequest } from "@/lib/rateLimit";
 import { localPath } from "@/lib/localEngine";
 import { pathSystem, profileBlock } from "@/lib/prompts";
 import { hasGoal, normalizeProfile } from "@/lib/profile";
@@ -12,12 +12,7 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const gate = guardRequest(req);
-  if (gate.rejected) {
-    return NextResponse.json(tooManyBody(gate.rejected), {
-      status: 429,
-      headers: tooManyHeaders(gate.rejected),
-    });
-  }
+  if (gate.rejected) return gate.rejected;
 
   let profile: Profile | undefined;
   let feedback = "";
@@ -88,6 +83,6 @@ export async function POST(req: Request) {
   }
   return NextResponse.json(
     { path, source },
-    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+    degradedInit(gate.degraded)
   );
 }

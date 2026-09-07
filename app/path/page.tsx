@@ -9,6 +9,7 @@ import { SkillRadar } from "@/components/SkillRadar";
 import { useToast } from "@/components/Toast";
 import { Button, Chip, Empty, Notice, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
 import { usePost } from "@/lib/hooks";
+import { milestoneProgress, pathProgress, sumHours, weeksAt } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
 import type { LearningPath } from "@/lib/types";
 
@@ -28,18 +29,15 @@ export default function PathPage() {
 
   const stats = useMemo(() => {
     if (!path || !profile) return null;
-    const items = path.milestones.flatMap((m) => m.items);
-    const done = items.filter((i) => completed.includes(i.id));
-    const remainingHours = items.filter((i) => !completed.includes(i.id)).reduce((s, i) => s + i.hours, 0);
-    const weeks = Math.ceil(path.totalHours / Math.max(1, profile.weeklyHours));
+    const progress = pathProgress(path, completed);
+    // The whole plan's length, not what is left — the dashboard quotes the
+    // other one, and they are meant to differ.
+    const weeks = weeksAt(path.totalHours, profile.weeklyHours);
     return {
-      items,
-      done,
-      remainingHours,
+      ...progress,
       weeks,
       overrun: weeks > profile.targetWeeks,
-      pct: items.length ? Math.round((done.length / items.length) * 100) : 0,
-      kinds: items.reduce<Record<string, number>>((acc, i) => {
+      kinds: progress.items.reduce<Record<string, number>>((acc, i) => {
         acc[i.kind] = (acc[i.kind] ?? 0) + 1;
         return acc;
       }, {}),
@@ -180,9 +178,8 @@ export default function PathPage() {
             // Running position across the whole path, derived rather than
             // accumulated in a variable mutated during render.
             const offset = path.milestones.slice(0, mi).reduce((s, p) => s + p.items.length, 0);
-            const done = m.items.filter((i) => completed.includes(i.id)).length;
-            const complete = done === m.items.length;
-            const hours = m.items.reduce((s, i) => s + i.hours, 0);
+            const { done, state } = milestoneProgress(m, completed);
+            const hours = sumHours(m.items);
             return (
               <Panel key={m.id} as="section" className="scroll-mt-20" >
                 <div id={m.id} className="scroll-mt-20" />
@@ -204,7 +201,7 @@ export default function PathPage() {
                       {done}
                       <span className="text-[14px] text-ink-faint">/{m.items.length}</span>
                     </p>
-                    <p className="t-meta mt-1">{complete ? "complete" : done ? "in progress" : "not started"}</p>
+                    <p className="t-meta mt-1">{state}</p>
                   </div>
                 </div>
                 <ul>

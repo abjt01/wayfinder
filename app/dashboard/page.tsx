@@ -8,6 +8,7 @@ import { SkillRadar } from "@/components/SkillRadar";
 import { useAssistant } from "@/components/AssistantHost";
 import { Button, Chip, Empty, Meter, Notice, Panel, PanelHead, Spinner, Stat } from "@/components/ui";
 import { usePost } from "@/lib/hooks";
+import { milestoneProgress, milestonesCleared, paceFor, pathProgress, weeksAt } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
 
 type Coach = {
@@ -28,11 +29,8 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     if (!path || !profile) return null;
-    const items = path.milestones.flatMap((m) => m.items);
-    const done = items.filter((i) => completed.includes(i.id));
-    const hoursDone = done.reduce((s, i) => s + i.hours, 0);
-    const remaining = items.filter((i) => !completed.includes(i.id));
-    const remainingHours = remaining.reduce((s, i) => s + i.hours, 0);
+    const progress = pathProgress(path, completed);
+    const { items, remaining, remainingHours } = progress;
 
     const skills = new Map<string, { total: number; done: number; hours: number; doneHours: number }>();
     for (const item of items) {
@@ -59,18 +57,13 @@ export default function DashboardPage() {
       .slice(0, 8);
 
     return {
-      items,
-      done,
-      remaining,
-      hoursDone,
-      remainingHours,
-      pct: items.length ? Math.round((done.length / items.length) * 100) : 0,
-      weeksLeft: Math.ceil(remainingHours / Math.max(1, profile.weeklyHours)),
-      neededPace: Math.ceil(remainingHours / Math.max(1, profile.targetWeeks)),
+      ...progress,
+      // What is left, not the whole plan — /path quotes that one instead.
+      weeksLeft: weeksAt(remainingHours, profile.weeklyHours),
+      neededPace: paceFor(remainingHours, profile.targetWeeks),
       skillRows,
-      next: remaining[0] ?? null,
       upcoming: remaining.slice(0, 3),
-      milestonesDone: path.milestones.filter((m) => m.items.every((i) => completed.includes(i.id))).length,
+      milestonesDone: milestonesCleared(path, completed),
       radar: skillRows.slice(0, 7).map((s) => ({ skill: s.skill, current: s.pct, target: 100 })),
     };
   }, [path, profile, completed]);
@@ -137,7 +130,7 @@ export default function DashboardPage() {
 
         <Panel className="px-5 py-5">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="HOURS LOGGED" value={stats.hoursDone} suffix="h" sub={`of ${path.totalHours}h planned`} />
+            <Stat label="HOURS LOGGED" value={stats.doneHours} suffix="h" sub={`of ${path.totalHours}h planned`} />
             <Stat
               label="WEEKS REMAINING"
               value={stats.weeksLeft}
@@ -155,10 +148,10 @@ export default function DashboardPage() {
             <div className="flex items-baseline justify-between pb-2">
               <p className="t-meta">EFFORT COMPLETED</p>
               <p className="t-meta">
-                {stats.hoursDone}h of {path.totalHours}h
+                {stats.doneHours}h of {path.totalHours}h
               </p>
             </div>
-            <Meter value={(stats.hoursDone / Math.max(1, path.totalHours)) * 100} segments={40} tone="ink" />
+            <Meter value={(stats.doneHours / Math.max(1, path.totalHours)) * 100} segments={40} tone="ink" />
           </div>
 
           {behind && (
@@ -215,9 +208,7 @@ export default function DashboardPage() {
           <PanelHead title="Milestone timeline" meta={`${stats.milestonesDone}/${path.milestones.length} cleared`} />
           <ol className="divide-y divide-rule-soft">
             {path.milestones.map((m, i) => {
-              const done = m.items.filter((it) => completed.includes(it.id)).length;
-              const pct = Math.round((done / m.items.length) * 100);
-              const state = pct === 100 ? "complete" : pct > 0 ? "in progress" : "not started";
+              const { pct, state } = milestoneProgress(m, completed);
               return (
                 <li key={m.id} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
                   <span className="t-num w-8 shrink-0 text-[20px] text-ink-faint">

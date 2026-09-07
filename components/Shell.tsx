@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Kbd } from "./ui";
+import { pathProgress } from "@/lib/progress";
 import { useHydrated, useStore } from "@/lib/store";
 
 const LINKS = [
@@ -32,8 +33,7 @@ export function Header() {
     };
   }, []);
 
-  const items = path?.milestones.flatMap((m) => m.items) ?? [];
-  const pct = items.length ? Math.round((items.filter((i) => completed.includes(i.id)).length / items.length) * 100) : 0;
+  const { pct } = pathProgress(path, completed);
 
   return (
     <header className="sticky top-0 z-50 border-b border-rule bg-paper/92 backdrop-blur-[2px]">

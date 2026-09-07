@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { chatJSON } from "@/lib/groq";
-import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
+import { degradedInit, guardRequest } from "@/lib/rateLimit";
 import { localProfile } from "@/lib/localEngine";
 import { PROFILE_SYSTEM } from "@/lib/prompts";
 import { normalizeProfile } from "@/lib/profile";
@@ -12,12 +12,7 @@ type Extracted = Profile & { followUp?: string };
 
 export async function POST(req: Request) {
   const gate = guardRequest(req);
-  if (gate.rejected) {
-    return NextResponse.json(tooManyBody(gate.rejected), {
-      status: 429,
-      headers: tooManyHeaders(gate.rejected),
-    });
-  }
+  if (gate.rejected) return gate.rejected;
 
   let message = "";
   let previous: Partial<Profile> | null = null;
@@ -76,6 +71,6 @@ export async function POST(req: Request) {
       source: "local",
     },
     // Says the answer is local because the key budget is spent, not missing.
-    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+    degradedInit(gate.degraded)
   );
 }

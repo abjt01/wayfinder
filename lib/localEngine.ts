@@ -9,6 +9,7 @@
  */
 import { CATALOG, COURSE_BY_ID, retrieveCourses } from "./catalog";
 import type { RawPath } from "./buildPath";
+import { pathItems, pathProgress, paceFor, weeksAt } from "./progress";
 import type { Course, LearningPath, Level, Profile } from "./types";
 
 /* ------------------------------------------------------------------ */
@@ -510,11 +511,9 @@ export function localPath(
 /* ------------------------------------------------------------------ */
 
 export function localExplain(course: Course, profile: Profile, path?: LearningPath | null): string {
-  const unlocks =
-    path?.milestones
-      .flatMap((m) => m.items)
-      .filter((i) => i.courseId && COURSE_BY_ID.get(i.courseId)?.prereqs.includes(course.id))
-      .map((i) => i.title) ?? [];
+  const unlocks = pathItems(path)
+    .filter((i) => i.courseId && COURSE_BY_ID.get(i.courseId)?.prereqs.includes(course.id))
+    .map((i) => i.title);
   const newSkills = course.skills.filter((s) => !knowsSkill(profile, s));
 
   const why =
@@ -550,11 +549,8 @@ export function localChat(
   if (!profile || !path) {
     return "I do not have a profile or path for you yet. Describe your goal on the start page and I will have something concrete to talk about.";
   }
-  const items = path.milestones.flatMap((m) => m.items);
-  const done = items.filter((i) => completed.includes(i.id));
-  const next = items.find((i) => !completed.includes(i.id));
-  const remainingHours = items.filter((i) => !completed.includes(i.id)).reduce((s, i) => s + i.hours, 0);
-  const weeks = Math.ceil(remainingHours / Math.max(1, profile.weeklyHours));
+  const { items, done, next, remainingHours } = pathProgress(path, completed);
+  const weeks = weeksAt(remainingHours, profile.weeklyHours);
 
   if (/\bwhy\b/.test(q) && next) {
     return `**${next.title}** is next because: ${next.why}\n\n${next.prereqNote || "It has no unmet prerequisites, so you can start it today."}\n\nIt is ${next.hours} hours, which is about ${Math.max(1, Math.round(next.hours / Math.max(1, profile.weeklyHours)))} week(s) at your pace.`;
@@ -572,7 +568,7 @@ export function localChat(
       weeks <= profile.targetWeeks
         ? `Yes — ${weeks} weeks left against a ${profile.targetWeeks}-week target.`
         : `Not at this pace. ${weeks} weeks of work remain against a ${profile.targetWeeks}-week target.`;
-    return `${verdict}\n\n- Remaining effort: **${remainingHours} h** across ${items.length - done.length} items\n- Your budget: ${profile.weeklyHours} h/week\n- To hit the target you would need about **${Math.ceil(remainingHours / Math.max(1, profile.targetWeeks))} h/week**\n\nIf that is not realistic, ask me to trim it and apply "Adapt path".`;
+    return `${verdict}\n\n- Remaining effort: **${remainingHours} h** across ${items.length - done.length} items\n- Your budget: ${profile.weeklyHours} h/week\n- To hit the target you would need about **${paceFor(remainingHours, profile.targetWeeks)} h/week**\n\nIf that is not realistic, ask me to trim it and apply "Adapt path".`;
   }
   if (/(project|hands.?on|practical|build)/.test(q)) {
     const projects = items.filter((i) => i.kind === "project");
@@ -592,32 +588,28 @@ export function localCoach(
   path: LearningPath,
   completedIds: string[]
 ): { status: string; observations: string[]; nextActions: { title: string; detail: string; effort: string }[]; pathChange: string } {
-  const items = path.milestones.flatMap((m) => m.items);
-  const done = items.filter((i) => completedIds.includes(i.id));
-  const pct = items.length ? Math.round((done.length / items.length) * 100) : 0;
-  const hoursDone = done.reduce((s, i) => s + i.hours, 0);
-  const remaining = items.filter((i) => !completedIds.includes(i.id));
-  const remainingHours = remaining.reduce((s, i) => s + i.hours, 0);
-  const weeksNeeded = Math.ceil(remainingHours / Math.max(1, profile.weeklyHours));
+  const { items, remaining, doneHours, remainingHours, pct } = pathProgress(path, completedIds);
+  const weeksNeeded = weeksAt(remainingHours, profile.weeklyHours);
   const next = remaining.slice(0, 2);
   const currentMilestone =
     path.milestones.find((m) => m.items.some((i) => !completedIds.includes(i.id))) ?? path.milestones[0];
 
   const observations: string[] = [];
   observations.push(
-    `${hoursDone} of ${path.totalHours} planned hours logged — ${pct}% of the path, with ${remainingHours} h left.`
+    `${doneHours} of ${path.totalHours} planned hours logged — ${pct}% of the path, with ${remainingHours} h left.`
   );
   if (weeksNeeded > profile.targetWeeks) {
     observations.push(
-      `At ${profile.weeklyHours} h/week you need ${weeksNeeded} more weeks, which overruns your ${profile.targetWeeks}-week target. Either raise weekly hours to ~${Math.ceil(remainingHours / Math.max(1, profile.targetWeeks))} or cut a late milestone.`
+      `At ${profile.weeklyHours} h/week you need ${weeksNeeded} more weeks, which overruns your ${profile.targetWeeks}-week target. Either raise weekly hours to ~${paceFor(remainingHours, profile.targetWeeks)} or cut a late milestone.`
     );
   } else {
     observations.push(
       `${weeksNeeded} week(s) of work remain, inside your ${profile.targetWeeks}-week target.`
     );
   }
+  const totalProjects = items.filter((i) => i.kind === "project").length;
   const unfinishedProjects = remaining.filter((i) => i.kind === "project").length;
-  if (pct > 40 && unfinishedProjects === remaining.filter((i) => i.kind === "project").length && unfinishedProjects > 0) {
+  if (pct > 40 && totalProjects > 0 && unfinishedProjects === totalProjects) {
     observations.push(
       `All ${unfinishedProjects} project${unfinishedProjects > 1 ? "s are" : " is"} still ahead of you. Course completion without a shipped project is the most common way this path stalls.`
     );

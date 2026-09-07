@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { COURSE_BY_ID } from "@/lib/catalog";
 import { chatText } from "@/lib/groq";
-import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
+import { degradedInit, guardRequest } from "@/lib/rateLimit";
 import { localExplain } from "@/lib/localEngine";
 import { profileBlock } from "@/lib/prompts";
 import { hasGoal, normalizeProfile } from "@/lib/profile";
@@ -12,12 +12,7 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const gate = guardRequest(req);
-  if (gate.rejected) {
-    return NextResponse.json(tooManyBody(gate.rejected), {
-      status: 429,
-      headers: tooManyHeaders(gate.rejected),
-    });
-  }
+  if (gate.rejected) return gate.rejected;
 
   let courseId = "";
   let profile: Profile | undefined;
@@ -69,6 +64,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json(
     { explanation: localExplain(course, learner, path), source: "local" },
-    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+    degradedInit(gate.degraded)
   );
 }

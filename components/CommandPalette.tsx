@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Kbd } from "./ui";
 import { useToast } from "./Toast";
 import { useHotkeys, useScrollLock } from "@/lib/hooks";
+import { pathProgress } from "@/lib/progress";
 import { useStore } from "@/lib/store";
 import { useAssistant } from "./AssistantHost";
 
@@ -76,8 +77,7 @@ export function CommandPalette() {
     ];
 
     if (path) {
-      const items = path.milestones.flatMap((m) => m.items);
-      const next = items.find((i) => !completed.includes(i.id));
+      const { items, next } = pathProgress(path, completed);
       if (next) {
         list.push({
           id: "complete-next",
