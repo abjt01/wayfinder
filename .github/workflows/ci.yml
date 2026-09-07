@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types, build, end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `ci` not `install`: fails on a lockfile that disagrees with package.json
+      # instead of quietly resolving something else.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # No BUILD_STANDALONE here on purpose. This is the output a managed host
+      # produces, so CI checks the same thing that gets deployed; the Docker
+      # job below covers the standalone variant.
+      - name: Build
+        run: npm run build
+
+      - name: Start the production server
+        run: |
+          npm run start &
+          echo "$!" > server.pid
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health > /dev/null; then
+              echo "server up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server did not become healthy in 60s"
+          exit 1
+
+      # 110 assertions over the real HTTP API: three learner personas end to
+      # end, prerequisite ordering, budget limits, streaming, rate limiting,
+      # malformed input, and every page rendering.
+      - name: Verify
+        run: npm run verify
+
+      - name: Stop the server
+        if: always()
+        run: kill "$(cat server.pid)" || true
+
+  docker:
+    name: Image builds and serves
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Loaded into the local daemon rather than pushed: this proves the image
+      # builds and boots. Add a registry login and push here when there is
+      # somewhere to publish it.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: wayfinder:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run the container
+        run: |
+          docker run -d --name wayfinder -p 3000:3000 wayfinder:ci
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health > /dev/null; then
+              echo "container healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "container did not become healthy in 60s"
+          docker logs wayfinder
+          exit 1
+
+      # The image ships no key, so it must answer on the local engine alone.
+      - name: Smoke test the running image
+        run: |
+          set -euo pipefail
+          curl -sf http://127.0.0.1:3000/api/health | tee /dev/stderr | grep -q '"ok":true'
+          curl -sf -o /dev/null -w 'start page: %{http_code}\n' http://127.0.0.1:3000/
+          curl -sf -X POST http://127.0.0.1:3000/api/profile \
+            -H 'Content-Type: application/json' \
+            -d '{"message":"I want to become a data analyst, 5 hours a week"}' \
+            | grep -q '"profile"'
+          echo "image serves the app without an API key"
+
+      - name: Container logs
+        if: failure()
+        run: docker logs wayfinder || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f wayfinder || true
