@@ -1,48 +1,24 @@
 import { NextResponse } from "next/server";
-import { chatJSON, hasKey } from "@/lib/groq";
+import { chatJSON } from "@/lib/groq";
+import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
 import { localProfile } from "@/lib/localEngine";
 import { PROFILE_SYSTEM } from "@/lib/prompts";
-import type { Level, Profile } from "@/lib/types";
+import { normalizeProfile } from "@/lib/profile";
+import type { Profile } from "@/lib/types";
 
 export const maxDuration = 60;
 
 type Extracted = Profile & { followUp?: string };
-const LEVELS: Level[] = ["beginner", "intermediate", "advanced"];
-
-function clampNumber(v: unknown, fallback: number, min: number, max: number) {
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, Math.round(n)));
-}
-
-function strArray(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return Array.from(
-    new Set(
-      v
-        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
-        .map((s) => s.trim().slice(0, 60))
-    )
-  ).slice(0, 12);
-}
-
-function normalize(raw: Partial<Extracted>, message: string): Profile {
-  const level = LEVELS.includes(raw.level as Level) ? (raw.level as Level) : "beginner";
-  return {
-    goal: typeof raw.goal === "string" && raw.goal.trim() ? raw.goal.trim().slice(0, 240) : message.slice(0, 240),
-    role: typeof raw.role === "string" && raw.role.trim() ? raw.role.trim().slice(0, 60) : "Self-directed learner",
-    level,
-    interests: strArray(raw.interests),
-    knownSkills: strArray(raw.knownSkills),
-    completedCourses: strArray(raw.completedCourses),
-    weeklyHours: clampNumber(raw.weeklyHours, 8, 1, 60),
-    targetWeeks: clampNumber(raw.targetWeeks, 12, 1, 104),
-    preferences: strArray(raw.preferences),
-    notes: typeof raw.notes === "string" ? raw.notes.slice(0, 400) : "",
-  };
-}
 
 export async function POST(req: Request) {
+  const gate = guardRequest(req);
+  if (gate.rejected) {
+    return NextResponse.json(tooManyBody(gate.rejected), {
+      status: 429,
+      headers: tooManyHeaders(gate.rejected),
+    });
+  }
+
   let message = "";
   let previous: Partial<Profile> | null = null;
   try {
@@ -61,7 +37,7 @@ export async function POST(req: Request) {
   }
   if (message.length > 4000) message = message.slice(0, 4000);
 
-  if (hasKey()) {
+  if (gate.useGroq) {
     try {
       const context = previous
         ? `\n\nExisting profile to update (keep what still applies):\n${JSON.stringify(previous)}`
@@ -71,7 +47,7 @@ export async function POST(req: Request) {
         { role: "user", content: `Learner said:\n"""${message}"""${context}` },
       ]);
       return NextResponse.json({
-        profile: normalize(raw, message),
+        profile: normalizeProfile(raw, message),
         followUp: typeof raw.followUp === "string" ? raw.followUp.slice(0, 240) : "",
         source: "groq",
       });
@@ -93,9 +69,13 @@ export async function POST(req: Request) {
       }
     : local;
 
-  return NextResponse.json({
-    profile: normalize(merged, message),
-    followUp: local.followUp,
-    source: "local",
-  });
+  return NextResponse.json(
+    {
+      profile: normalizeProfile(merged, message),
+      followUp: local.followUp,
+      source: "local",
+    },
+    // Says the answer is local because the key budget is spent, not missing.
+    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+  );
 }

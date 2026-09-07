@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
 import { COURSE_BY_ID } from "@/lib/catalog";
-import { chatText, hasKey } from "@/lib/groq";
+import { chatText } from "@/lib/groq";
+import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
 import { localExplain } from "@/lib/localEngine";
 import { profileBlock } from "@/lib/prompts";
+import { hasGoal, normalizeProfile } from "@/lib/profile";
 import { pathDigest } from "@/lib/buildPath";
 import type { LearningPath, Profile } from "@/lib/types";
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  const gate = guardRequest(req);
+  if (gate.rejected) {
+    return NextResponse.json(tooManyBody(gate.rejected), {
+      status: 429,
+      headers: tooManyHeaders(gate.rejected),
+    });
+  }
+
   let courseId = "";
   let profile: Profile | undefined;
   let path: LearningPath | null = null;
@@ -27,9 +37,12 @@ export async function POST(req: Request) {
 
   const course = COURSE_BY_ID.get(courseId);
   if (!course) return NextResponse.json({ error: "Unknown course id." }, { status: 400 });
-  if (!profile?.goal) return NextResponse.json({ error: "A learner profile is required." }, { status: 400 });
+  if (!hasGoal(profile)) {
+    return NextResponse.json({ error: "A learner profile is required." }, { status: 400 });
+  }
+  const learner = normalizeProfile(profile);
 
-  if (hasKey()) {
+  if (gate.useGroq) {
     try {
       const prereqs = course.prereqs.map((p) => COURSE_BY_ID.get(p)?.title || p);
       const text = await chatText(
@@ -43,7 +56,7 @@ export async function POST(req: Request) {
           },
           {
             role: "user",
-            content: `${profileBlock(profile)}\n\nRecommended item: ${course.title} (${course.kind}, ${course.level}, ${course.hours}h)\nSkills taught: ${course.skills.join(", ")}\nPrerequisites: ${prereqs.join(", ") || "none"}\nSummary: ${course.summary}\n\nTheir path:\n${path ? pathDigest(path) : "n/a"}`,
+            content: `${profileBlock(learner)}\n\nRecommended item: ${course.title} (${course.kind}, ${course.level}, ${course.hours}h)\nSkills taught: ${course.skills.join(", ")}\nPrerequisites: ${prereqs.join(", ") || "none"}\nSummary: ${course.summary}\n\nTheir path:\n${path ? pathDigest(path) : "n/a"}`,
           },
         ],
         0.4
@@ -54,8 +67,8 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({
-    explanation: localExplain(course, profile, path),
-    source: "local",
-  });
+  return NextResponse.json(
+    { explanation: localExplain(course, learner, path), source: "local" },
+    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+  );
 }

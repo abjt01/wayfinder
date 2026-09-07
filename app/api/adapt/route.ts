@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { chatJSON, hasKey } from "@/lib/groq";
+import { chatJSON } from "@/lib/groq";
+import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
 import { localCoach } from "@/lib/localEngine";
 import { profileBlock } from "@/lib/prompts";
+import { hasGoal, normalizeProfile } from "@/lib/profile";
 import { pathDigest } from "@/lib/buildPath";
 import type { LearningPath, Profile } from "@/lib/types";
 
@@ -15,6 +17,14 @@ type Advice = {
 };
 
 export async function POST(req: Request) {
+  const gate = guardRequest(req);
+  if (gate.rejected) {
+    return NextResponse.json(tooManyBody(gate.rejected), {
+      status: 429,
+      headers: tooManyHeaders(gate.rejected),
+    });
+  }
+
   let profile: Profile | undefined;
   let path: LearningPath | undefined;
   let completedIds: string[] = [];
@@ -34,11 +44,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Malformed request body." }, { status: 400 });
   }
 
-  if (!profile?.goal || !path?.milestones?.length) {
+  if (!hasGoal(profile) || !path?.milestones?.length) {
     return NextResponse.json({ error: "A profile and a generated path are required." }, { status: 400 });
   }
+  const learner = normalizeProfile(profile);
 
-  if (hasKey()) {
+  if (gate.useGroq) {
     try {
       const done = new Set(completedIds);
       const remaining = path.milestones
@@ -59,7 +70,7 @@ export async function POST(req: Request) {
           },
           {
             role: "user",
-            content: `${profileBlock(profile)}\n\nPath: ${path.title}\n${pathDigest(path)}\n\nCompleted item count: ${done.size} of ${path.milestones.flatMap((m) => m.items).length}\nRemaining: ${remaining.join("; ") || "nothing"}\nLearner feedback: ${feedback || "none given"}`,
+            content: `${profileBlock(learner)}\n\nPath: ${path.title}\n${pathDigest(path)}\n\nCompleted item count: ${done.size} of ${path.milestones.flatMap((m) => m.items).length}\nRemaining: ${remaining.join("; ") || "nothing"}\nLearner feedback: ${feedback || "none given"}`,
           },
         ],
         0.4
@@ -80,5 +91,8 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ...localCoach(profile, path, completedIds), source: "local" });
+  return NextResponse.json(
+    { ...localCoach(learner, path, completedIds), source: "local" },
+    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+  );
 }

@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
 import { catalogLines, retrieveCourses } from "@/lib/catalog";
 import { buildPath, pathIsUsable, pathDigest, type RawPath } from "@/lib/buildPath";
-import { chatJSON, hasKey } from "@/lib/groq";
+import { chatJSON } from "@/lib/groq";
+import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
 import { localPath } from "@/lib/localEngine";
 import { pathSystem, profileBlock } from "@/lib/prompts";
+import { hasGoal, normalizeProfile } from "@/lib/profile";
 import type { LearningPath, Profile } from "@/lib/types";
 
 export const maxDuration = 60;
 
-function validProfile(p: unknown): p is Profile {
-  const c = p as Profile | undefined;
-  return Boolean(
-    c &&
-      typeof c.goal === "string" &&
-      c.goal.trim().length > 3 &&
-      typeof c.weeklyHours === "number" &&
-      Array.isArray(c.interests)
-  );
-}
-
 export async function POST(req: Request) {
+  const gate = guardRequest(req);
+  if (gate.rejected) {
+    return NextResponse.json(tooManyBody(gate.rejected), {
+      status: 429,
+      headers: tooManyHeaders(gate.rejected),
+    });
+  }
+
   let profile: Profile | undefined;
   let feedback = "";
   let currentPath: LearningPath | null = null;
@@ -36,18 +35,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Malformed request body." }, { status: 400 });
   }
 
-  if (!validProfile(profile)) {
+  if (!hasGoal(profile)) {
     return NextResponse.json({ error: "A learner profile with a goal is required." }, { status: 400 });
   }
+  // Anything past this point indexes into the profile's arrays, so coerce a
+  // partial or stale one into a complete Profile rather than crashing on it.
+  const learner = normalizeProfile(profile);
 
   let source: "groq" | "local" = "local";
   let raw: RawPath | null = null;
 
-  if (hasKey()) {
+  if (gate.useGroq) {
     try {
       const candidates = retrieveCourses(
-        `${profile.goal} ${profile.role} ${profile.interests.join(" ")} ${profile.knownSkills.join(" ")} ${feedback}`,
-        { level: profile.level, interests: profile.interests, limit: 34 }
+        `${learner.goal} ${learner.role} ${learner.interests.join(" ")} ${learner.knownSkills.join(" ")} ${feedback}`,
+        { level: learner.level, interests: learner.interests, limit: 34 }
       );
       const adaptBlock =
         feedback && currentPath
@@ -59,14 +61,14 @@ export async function POST(req: Request) {
           { role: "system", content: pathSystem() },
           {
             role: "user",
-            content: `${profileBlock(profile)}\n\nCatalog (id | title | kind | provider | level | hours | skills | prereqs):\n${catalogLines(
+            content: `${profileBlock(learner)}\n\nCatalog (id | title | kind | provider | level | hours | skills | prereqs):\n${catalogLines(
               candidates
             )}${adaptBlock}`,
           },
         ],
         0.35
       );
-      const candidate = buildPath(raw, profile);
+      const candidate = buildPath(raw, learner);
       if (pathIsUsable(candidate)) {
         return NextResponse.json({ path: candidate, source: "groq" });
       }
@@ -76,13 +78,16 @@ export async function POST(req: Request) {
     }
   }
 
-  raw = localPath(profile, feedback, currentPath);
-  const path = buildPath(raw, profile);
+  raw = localPath(learner, feedback, currentPath);
+  const path = buildPath(raw, learner);
   if (!pathIsUsable(path)) {
     return NextResponse.json(
       { error: "Could not build a path for that goal. Try describing it in terms of what you want to be able to do." },
       { status: 422 }
     );
   }
-  return NextResponse.json({ path, source });
+  return NextResponse.json(
+    { path, source },
+    gate.degraded ? { headers: { "X-Engine-Degraded": "rate-limit" } } : undefined
+  );
 }

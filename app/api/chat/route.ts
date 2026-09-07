@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { hasKey, streamText } from "@/lib/groq";
+import { streamText } from "@/lib/groq";
+import { guardRequest, tooManyBody, tooManyHeaders } from "@/lib/rateLimit";
 import { localChat, textToStream } from "@/lib/localEngine";
 import { ASSISTANT_SYSTEM, profileBlock } from "@/lib/prompts";
+import { hasGoal, normalizeProfile } from "@/lib/profile";
 import { pathDigest } from "@/lib/buildPath";
 import type { ChatMessage, LearningPath, Profile } from "@/lib/types";
 
@@ -14,6 +16,14 @@ const STREAM_HEADERS = {
 };
 
 export async function POST(req: Request) {
+  const gate = guardRequest(req);
+  if (gate.rejected) {
+    return NextResponse.json(tooManyBody(gate.rejected), {
+      status: 429,
+      headers: tooManyHeaders(gate.rejected),
+    });
+  }
+
   let messages: ChatMessage[] = [];
   let profile: Profile | null = null;
   let path: LearningPath | null = null;
@@ -33,15 +43,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Malformed request body." }, { status: 400 });
   }
 
+  // Null when no profile was captured yet; complete whenever one was.
+  const learner = hasGoal(profile) ? normalizeProfile(profile) : null;
+
   const last = messages[messages.length - 1];
   if (!last || last.role !== "user" || !last.content.trim()) {
     return NextResponse.json({ error: "No question provided." }, { status: 400 });
   }
 
-  if (hasKey()) {
+  if (gate.useGroq) {
     try {
       const context = [
-        profile ? profileBlock(profile) : "No profile captured yet.",
+        learner ? profileBlock(learner) : "No profile captured yet.",
         path ? `Current path: ${path.title}\n${pathDigest(path)}` : "No path generated yet.",
         completed.length
           ? `Item ids the learner marked complete: ${completed.join(", ")}`
@@ -61,6 +74,12 @@ export async function POST(req: Request) {
     }
   }
 
-  const answer = localChat(last.content, profile, path, completed);
-  return new Response(textToStream(answer), { headers: { ...STREAM_HEADERS, "X-Engine": "local" } });
+  const answer = localChat(last.content, learner, path, completed);
+  return new Response(textToStream(answer), {
+    headers: {
+      ...STREAM_HEADERS,
+      "X-Engine": "local",
+      ...(gate.degraded ? { "X-Engine-Degraded": "rate-limit" } : {}),
+    },
+  });
 }
