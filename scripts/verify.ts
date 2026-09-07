@@ -1,7 +1,10 @@
 /**
  * End-to-end check against a running server.
- *   bun run dev            (in one shell)
- *   bun run verify         (in another)
+ *   npm run dev            (in one shell)
+ *   npm run verify         (in another)
+ *
+ * Point it elsewhere with VERIFY_BASE, which is how CI runs it against a
+ * production build.
  *
  * Walks the real user journey through the HTTP API and asserts the invariants
  * that matter: prerequisites ordered, no invented courses, budgets respected,
@@ -27,10 +30,27 @@ function check(label: string, condition: boolean, detail = "") {
   }
 }
 
-async function post<T>(path: string, body: unknown): Promise<{ status: number; data: T }> {
+/**
+ * Every request carries a caller address so the suite sits in its own
+ * rate-limit bucket. Sections that need isolation call `bucket()` first, which
+ * keeps the limiter from ever being the reason an unrelated assertion fails.
+ *
+ * The octet is randomised per run so two runs inside the same rate-limit
+ * window do not inherit each other's counters.
+ */
+const RUN = Math.floor(Math.random() * 250) + 1;
+const bucket = (n: number) => `10.${RUN}.${n}.1`;
+
+let callerIp = bucket(0);
+
+async function post<T>(
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; data: T }> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": callerIp, ...headers },
     body: JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as T;
@@ -72,6 +92,7 @@ async function main() {
   console.log(`  ->   engine: ${health.engine} (${health.model}), catalog ${health.catalogSize}\n`);
 
   /* ---- validation / error handling ---- */
+  callerIp = bucket(1);
   console.log("input validation");
   check("empty goal rejected", (await post("/api/profile", { message: "" })).status === 400);
   check("short goal rejected", (await post("/api/profile", { message: "hi" })).status === 400);
@@ -81,10 +102,72 @@ async function main() {
   check("adapt without path rejected", (await post("/api/adapt", { profile: { goal: "x" } })).status === 400);
   console.log("");
 
+  /* ---- malformed profiles must degrade, not crash ----
+     Profiles are replayed from localStorage, so an old or partial one has to
+     be coerced rather than throwing a 500 inside the engine. */
+  callerIp = bucket(2);
+  console.log("malformed input");
+  const partial = await post<{ explanation: string }>("/api/explain", {
+    courseId: "py-101",
+    profile: { goal: "I want to learn python" },
+  });
+  check("explain survives a profile missing its arrays", partial.status === 200, `got ${partial.status}`);
+
+  const partialPath = await post<{ path: LearningPath }>("/api/path", {
+    profile: { goal: "I want to become a data analyst", weeklyHours: 8, interests: [] },
+  });
+  check("path survives a profile missing its arrays", partialPath.status === 200, `got ${partialPath.status}`);
+
+  const junk = await post<{ path: LearningPath }>("/api/path", {
+    profile: {
+      goal: "I want to become a data analyst",
+      weeklyHours: "not a number",
+      targetWeeks: null,
+      interests: "not an array",
+      knownSkills: null,
+      completedCourses: 42,
+      level: "wizard",
+    },
+  });
+  check("path coerces wrong field types", junk.status === 200, `got ${junk.status}`);
+  check(
+    "coerced path is still valid",
+    (junk.data.path?.milestones?.length ?? 0) > 0 &&
+      junk.data.path.milestones.flatMap((m) => m.items).every((i) => i.courseId && COURSE_BY_ID.has(i.courseId))
+  );
+  console.log("");
+
+  /* ---- rate limiting ---- */
+  console.log("rate limiting");
+  const limitIp = { "x-forwarded-for": bucket(30) };
+  const body = { courseId: "py-101", profile: { goal: "I want to learn python" } };
+  let sawTooMany = 0;
+  let firstBlockedAt = 0;
+  for (let i = 1; i <= 130; i++) {
+    const res = await post<{ retryAfter?: number }>("/api/explain", body, limitIp);
+    if (res.status === 429) {
+      sawTooMany++;
+      if (!firstBlockedAt) firstBlockedAt = i;
+    }
+  }
+  check("a flood is eventually refused", sawTooMany > 0);
+  check("the limit is not tight enough to hit a normal session", firstBlockedAt > 100, `blocked at ${firstBlockedAt}`);
+  check(
+    "another caller is unaffected",
+    (await post("/api/explain", body, { "x-forwarded-for": bucket(31) })).status === 200
+  );
+  check(
+    "health is never rate limited",
+    (await fetch(`${BASE}/api/health`, { headers: limitIp })).status === 200
+  );
+  console.log("");
+
   let lastProfile: Profile | null = null;
   let lastPath: LearningPath | null = null;
 
+  let personaIndex = 0;
   for (const p of PERSONAS) {
+    callerIp = bucket(10 + personaIndex++);
     console.log(`persona: ${p.name}`);
 
     /* ---- profile ---- */
@@ -185,6 +268,7 @@ async function main() {
   }
 
   /* ---- budget respect ---- */
+  callerIp = bucket(20);
   console.log("time budget");
   const tight = await post<{ path: LearningPath }>("/api/path", {
     profile: {
